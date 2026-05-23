@@ -179,6 +179,29 @@ CREATE TABLE IF NOT EXISTS sys_oper_log (
   PRIMARY KEY (oper_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志记录';
 
+CREATE TABLE IF NOT EXISTS sys_config (
+  config_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '参数主键',
+  config_name VARCHAR(100) DEFAULT '' COMMENT '参数名称',
+  config_key VARCHAR(100) DEFAULT '' COMMENT '参数键名',
+  config_value VARCHAR(500) DEFAULT '' COMMENT '参数键值',
+  config_type CHAR(1) DEFAULT 'N' COMMENT '系统内置（Y是 N否）',
+  remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  create_by VARCHAR(64) DEFAULT '' COMMENT '创建者',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by VARCHAR(64) DEFAULT '' COMMENT '更新者',
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (config_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='参数配置表';
+
+INSERT IGNORE INTO sys_config(config_id, config_name, config_key, config_value, config_type, create_by)
+VALUES
+  (1, '主框架页-默认皮肤样式名称', 'sys.index.skinName', 'skin-blue', 'Y', 'system'),
+  (2, '账号自助-是否开启用户注册功能', 'sys.account.registerUser', 'true', 'Y', 'system'),
+  (3, '账号自助-是否开启用户忘记密码功能', 'sys.account.passwordReset', 'true', 'Y', 'system'),
+  (4, '用户登录-账号最大错误次数', 'sys.account.passwordRetryCount', '5', 'Y', 'system'),
+  (5, '用户登录-密码锁定时间（默认10分钟）', 'sys.account.passwordLockTime', '10', 'Y', 'system'),
+  (6, '用户登录-是否开启登录验证码', 'sys.account.captcha', 'true', 'Y', 'system');
+
 INSERT IGNORE INTO sys_dept(dept_id, parent_id, ancestors, dept_name, order_num, leader, phone, email, status, create_by)
 VALUES (100, 0, '0', 'Art Design', 1, 'Super', '13800000000', 'admin@artd.local', '1', 'system');
 
