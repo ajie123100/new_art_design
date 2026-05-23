@@ -1,6 +1,16 @@
 import request from '@/utils/http'
 
 /**
+ * 获取验证码
+ * @returns 验证码信息
+ */
+export function fetchGetCaptcha() {
+  return request.get<Api.Auth.CaptchaInfo>({
+    url: '/api/auth/captchaImage'
+  })
+}
+
+/**
  * 登录
  * @param params 登录参数
  * @returns 登录响应

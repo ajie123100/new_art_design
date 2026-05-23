@@ -9,6 +9,12 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/art_design?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: root
     password: root
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
   sql:
     init:
       mode: always
@@ -43,3 +49,11 @@ springdoc:
 art:
   datasource:
     note: "使用 phpstudy_pro MySQL 8.0.12，默认库 art_design，账号 root/root。"
+
+captcha:
+  enabled: true
+  type: math
+  length: 4
+  width: 120
+  height: 40
+  expire: 2

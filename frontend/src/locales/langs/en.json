@@ -142,6 +142,7 @@
     "placeholder": {
       "username": "Please enter your account",
       "password": "Please enter your password",
+      "captcha": "Please enter captcha",
       "slider": "Please slide to verify"
     },
     "sliderText": "Please slide to verify",

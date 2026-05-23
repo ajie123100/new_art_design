@@ -62,10 +62,19 @@ declare namespace Api {
 
   /** 认证类型 */
   namespace Auth {
+    /** 验证码信息 */
+    interface CaptchaInfo {
+      captchaEnabled: boolean
+      uuid: string
+      img: string
+    }
+
     /** 登录参数 */
     interface LoginParams {
       userName: string
       password: string
+      code?: string
+      uuid?: string
     }
 
     /** 登录响应 */
