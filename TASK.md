@@ -6,18 +6,18 @@
 - [x] 登录日志查询 Controller（分页/列表）
 - [x] 操作日志查询 Controller（分页/列表）
 
-### 2. 岗位管理
-- [ ] sys_post 表 + sys_user_post 关联表
-- [ ] SysPost 实体 / Mapper / Service / Controller
+### 2. 岗位管理 ✅
+- [x] sys_post 表 + sys_user_post 关联表
+- [x] SysPost 实体 / Mapper / Service / Controller
 
-### 3. 系统参数配置
-- [ ] sys_config 表
-- [ ] SysConfig 实体 / Mapper / Service / Controller
-- [ ] Redis 缓存
+### 3. 系统参数配置 ✅
+- [x] sys_config 表 + 初始数据
+- [x] SysConfig 实体 / Mapper / Service / Controller
+- [x] Redis 缓存（30分钟TTL）
 
-### 4. 文件上传
-- [ ] 文件上传配置类
-- [ ] 本地文件上传 Service + Controller
+### 4. 文件上传 ✅
+- [x] 文件上传配置类 FileConfig
+- [x] 本地文件上传 Service + Controller
 
 ---
 
