@@ -23,9 +23,9 @@
 
 ## 阶段二：常用功能
 
-### 5. 通知公告
-- [ ] sys_notice 表
-- [ ] SysNotice 实体 / Mapper / Service / Controller
+### 5. 通知公告 ✅
+- [x] sys_notice 表
+- [x] SysNotice 实体 / Mapper / Service / Controller
 
 ### 6. 系统监控
 - [ ] 在线用户查询
