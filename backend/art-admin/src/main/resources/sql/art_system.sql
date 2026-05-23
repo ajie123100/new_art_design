@@ -138,6 +138,28 @@ CREATE TABLE IF NOT EXISTS sys_login_log (
   PRIMARY KEY (info_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统访问记录';
 
+CREATE TABLE IF NOT EXISTS sys_post (
+  post_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '岗位ID',
+  post_code VARCHAR(64) NOT NULL COMMENT '岗位编码',
+  post_name VARCHAR(50) NOT NULL COMMENT '岗位名称',
+  post_sort INT DEFAULT 0 COMMENT '显示顺序',
+  status CHAR(1) DEFAULT '1' COMMENT '状态：1正常 2停用',
+  del_flag CHAR(1) DEFAULT '0' COMMENT '删除标志',
+  create_by VARCHAR(64) DEFAULT '' COMMENT '创建者',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by VARCHAR(64) DEFAULT '' COMMENT '更新者',
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (post_id),
+  UNIQUE KEY uk_sys_post_code (post_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='岗位信息表';
+
+CREATE TABLE IF NOT EXISTS sys_user_post (
+  user_id BIGINT NOT NULL COMMENT '用户ID',
+  post_id BIGINT NOT NULL COMMENT '岗位ID',
+  PRIMARY KEY (user_id, post_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户和岗位关联表';
+
 CREATE TABLE IF NOT EXISTS sys_oper_log (
   oper_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '日志主键',
   title VARCHAR(50) DEFAULT '' COMMENT '模块标题',
