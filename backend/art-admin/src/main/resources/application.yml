@@ -1,0 +1,45 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: art-admin
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/art_design?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+      schema-locations: classpath:sql/art_system.sql
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis-plus:
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: delFlag
+      logic-delete-value: '1'
+      logic-not-delete-value: '0'
+
+sa-token:
+  token-name: Authorization
+  timeout: 86400
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+art:
+  datasource:
+    note: "使用 phpstudy_pro MySQL 8.0.12，默认库 art_design，账号 root/root。"

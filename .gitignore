@@ -1,11 +1,19 @@
-node_modules
-.DS_Store
-dist
-dist-ssr
-*.local
-.cursorrules
+# Dependencies
+node_modules/
 
-# Auto-generated files
-src/types/import/auto-imports.d.ts
-src/types/import/components.d.ts
-.auto-import.json
+# Build output
+dist/
+build/
+coverage/
+target/
+
+# Local environment
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
