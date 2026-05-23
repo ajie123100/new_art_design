@@ -193,6 +193,20 @@ CREATE TABLE IF NOT EXISTS sys_config (
   PRIMARY KEY (config_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='参数配置表';
 
+CREATE TABLE IF NOT EXISTS sys_notice (
+  notice_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '公告ID',
+  notice_title VARCHAR(50) NOT NULL COMMENT '公告标题',
+  notice_type CHAR(1) NOT NULL COMMENT '公告类型（1通知 2公告）',
+  notice_content LONGTEXT COMMENT '公告内容',
+  status CHAR(1) DEFAULT '0' COMMENT '公告状态（0正常 1关闭）',
+  create_by VARCHAR(64) DEFAULT '' COMMENT '创建者',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by VARCHAR(64) DEFAULT '' COMMENT '更新者',
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  remark VARCHAR(255) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (notice_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知公告表';
+
 INSERT IGNORE INTO sys_config(config_id, config_name, config_key, config_value, config_type, create_by)
 VALUES
   (1, '主框架页-默认皮肤样式名称', 'sys.index.skinName', 'skin-blue', 'Y', 'system'),
