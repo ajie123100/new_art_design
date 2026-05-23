@@ -27,18 +27,18 @@
 - [x] sys_notice 表
 - [x] SysNotice 实体 / Mapper / Service / Controller
 
-### 6. 系统监控
-- [ ] 在线用户查询
-- [ ] 服务器监控（CPU/内存/磁盘/JVM）
-- [ ] 缓存监控（Redis）
+### 6. 系统监控 ✅
+- [x] 在线用户查询
+- [x] 服务器监控（CPU/内存/磁盘/JVM）
+- [x] 缓存监控（Redis）
 
 ---
 
 ## 阶段三：开发提效
 
-### 7. Excel 导入导出
-- [ ] 引入 EasyExcel
-- [ ] 通用 Excel 工具类
+### 7. Excel 导入导出 ✅
+- [x] 引入 EasyExcel
+- [x] 通用 Excel 工具类
 
 ### 8. 代码生成
 - [ ] 代码生成模板
