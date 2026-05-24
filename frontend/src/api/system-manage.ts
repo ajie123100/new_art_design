@@ -258,3 +258,195 @@ export function fetchUpdateDeptStatus(params: Pick<Api.SystemManage.DeptSavePara
     showSuccessMessage: true
   })
 }
+
+function uploadExcel<T>(url: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<T>({
+    url,
+    data: formData,
+    showSuccessMessage: true
+  })
+}
+
+export function fetchExportUser(params?: Api.SystemManage.UserSearchParams) {
+  return request.download({ url: '/api/user/export', params, filename: 'user.xlsx' })
+}
+
+export function fetchImportUser(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/user/import', file)
+}
+
+export function fetchExportRole(params?: Api.SystemManage.RoleSearchParams) {
+  return request.download({ url: '/api/role/export', params, filename: 'role.xlsx' })
+}
+
+export function fetchImportRole(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/role/import', file)
+}
+
+export function fetchExportMenu(params?: Api.SystemManage.MenuSearchParams) {
+  return request.download({ url: '/api/menu/export', params, filename: 'menu.xlsx' })
+}
+
+export function fetchImportMenu(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/menu/import', file)
+}
+
+export function fetchGetConfigList(params: Api.SystemManage.ConfigSearchParams) {
+  return request.get<Api.SystemManage.ConfigList>({
+    url: '/api/config/list',
+    params
+  })
+}
+
+export function fetchGetConfigDetail(id: number) {
+  return request.get<Api.SystemManage.ConfigListItem>({
+    url: `/api/config/${id}`
+  })
+}
+
+export function fetchCreateConfig(params: Api.SystemManage.ConfigSaveParams) {
+  return request.post<number>({ url: '/api/config', params, showSuccessMessage: true })
+}
+
+export function fetchUpdateConfig(params: Api.SystemManage.ConfigSaveParams) {
+  return request.put<void>({ url: '/api/config', params, showSuccessMessage: true })
+}
+
+export function fetchDeleteConfig(ids: number | number[]) {
+  const pathIds = Array.isArray(ids) ? ids.join(',') : ids
+  return request.del<void>({ url: `/api/config/${pathIds}`, showSuccessMessage: true })
+}
+
+export function fetchRefreshConfigCache() {
+  return request.del<void>({ url: '/api/config/refreshCache', showSuccessMessage: true })
+}
+
+export function fetchExportConfig(params?: Api.SystemManage.ConfigSearchParams) {
+  return request.download({ url: '/api/config/export', params, filename: 'config.xlsx' })
+}
+
+export function fetchImportConfig(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/config/import', file)
+}
+
+export function fetchGetDictTypeList(params: Api.SystemManage.DictTypeSearchParams) {
+  return request.get<Api.SystemManage.DictTypeList>({
+    url: '/api/dict/type/list',
+    params
+  })
+}
+
+export function fetchCreateDictType(params: Api.SystemManage.DictTypeSaveParams) {
+  return request.post<number>({ url: '/api/dict/type', params, showSuccessMessage: true })
+}
+
+export function fetchUpdateDictType(params: Api.SystemManage.DictTypeSaveParams) {
+  return request.put<void>({ url: '/api/dict/type', params, showSuccessMessage: true })
+}
+
+export function fetchDeleteDictType(ids: number | number[]) {
+  const pathIds = Array.isArray(ids) ? ids.join(',') : ids
+  return request.del<void>({ url: `/api/dict/type/${pathIds}`, showSuccessMessage: true })
+}
+
+export function fetchUpdateDictTypeStatus(params: { dictId: number; enabled: boolean }) {
+  return request.put<void>({ url: '/api/dict/type/status', params, showSuccessMessage: true })
+}
+
+export function fetchExportDictType(params?: Api.SystemManage.DictTypeSearchParams) {
+  return request.download({ url: '/api/dict/type/export', params, filename: 'dict_type.xlsx' })
+}
+
+export function fetchImportDictType(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/dict/type/import', file)
+}
+
+export function fetchGetDictDataList(params: Api.SystemManage.DictDataSearchParams) {
+  return request.get<Api.SystemManage.DictDataList>({
+    url: '/api/dict/data/list',
+    params
+  })
+}
+
+export function fetchCreateDictData(params: Api.SystemManage.DictDataSaveParams) {
+  return request.post<number>({ url: '/api/dict/data', params, showSuccessMessage: true })
+}
+
+export function fetchUpdateDictData(params: Api.SystemManage.DictDataSaveParams) {
+  return request.put<void>({ url: '/api/dict/data', params, showSuccessMessage: true })
+}
+
+export function fetchDeleteDictData(ids: number | number[]) {
+  const pathIds = Array.isArray(ids) ? ids.join(',') : ids
+  return request.del<void>({ url: `/api/dict/data/${pathIds}`, showSuccessMessage: true })
+}
+
+export function fetchUpdateDictDataStatus(params: { dictCode: number; enabled: boolean }) {
+  return request.put<void>({ url: '/api/dict/data/status', params, showSuccessMessage: true })
+}
+
+export function fetchExportDictData(params?: Api.SystemManage.DictDataSearchParams) {
+  return request.download({ url: '/api/dict/data/export', params, filename: 'dict_data.xlsx' })
+}
+
+export function fetchImportDictData(file: File) {
+  return uploadExcel<Api.SystemManage.ImportResult>('/api/dict/data/import', file)
+}
+
+export function fetchGetPostList(params: Api.SystemManage.PostSearchParams) {
+  return request.get<Api.SystemManage.PostList>({ url: '/api/post/list', params })
+}
+
+export function fetchGetPostOptions() {
+  return request.get<Api.SystemManage.PostListItem[]>({ url: '/api/post/listAll' })
+}
+
+export function fetchCreatePost(params: Api.SystemManage.PostSaveParams) {
+  return request.post<number>({ url: '/api/post', params, showSuccessMessage: true })
+}
+
+export function fetchUpdatePost(params: Api.SystemManage.PostSaveParams) {
+  return request.put<void>({ url: '/api/post', params, showSuccessMessage: true })
+}
+
+export function fetchDeletePost(ids: number | number[]) {
+  const pathIds = Array.isArray(ids) ? ids.join(',') : ids
+  return request.del<void>({ url: `/api/post/${pathIds}`, showSuccessMessage: true })
+}
+
+export function fetchGetNoticeList(params: Api.SystemManage.NoticeSearchParams) {
+  return request.get<Api.SystemManage.NoticeList>({ url: '/api/notice/list', params })
+}
+
+export function fetchCreateNotice(params: Api.SystemManage.NoticeSaveParams) {
+  return request.post<number>({ url: '/api/notice', params, showSuccessMessage: true })
+}
+
+export function fetchUpdateNotice(params: Api.SystemManage.NoticeSaveParams) {
+  return request.put<void>({ url: '/api/notice', params, showSuccessMessage: true })
+}
+
+export function fetchDeleteNotice(ids: number | number[]) {
+  const pathIds = Array.isArray(ids) ? ids.join(',') : ids
+  return request.del<void>({ url: `/api/notice/${pathIds}`, showSuccessMessage: true })
+}
+
+export function fetchUploadFile(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<Api.SystemManage.FileUploadResult>({
+    url: '/api/file/upload',
+    data: formData,
+    showSuccessMessage: true
+  })
+}
+
+export function fetchDownloadFile(url: string) {
+  return request.download({ url: '/api/file/download', params: { url }, filename: 'file' })
+}
+
+export function fetchDeleteFile(url: string) {
+  return request.del<void>({ url: '/api/file', params: { url }, showSuccessMessage: true })
+}

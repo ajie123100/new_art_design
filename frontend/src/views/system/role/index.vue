@@ -17,6 +17,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton @click="showDialog('add')" v-ripple>新增角色</ElButton>
+            <ElButton @click="fetchExportRole(searchParams)">导出</ElButton>
           </ElSpace>
         </template>
       </ArtTableHeader>
@@ -49,12 +50,17 @@
 <script setup lang="ts">
   import { ButtonMoreItem } from '@/components/core/forms/art-button-more/index.vue'
   import { useTable } from '@/hooks/core/useTable'
-  import { fetchDeleteRole, fetchGetRoleList } from '@/api/system-manage'
+  import {
+    fetchDeleteRole,
+    fetchExportRole,
+    fetchGetRoleList,
+    fetchUpdateRoleStatus
+  } from '@/api/system-manage'
   import ArtButtonMore from '@/components/core/forms/art-button-more/index.vue'
   import RoleSearch from './modules/role-search.vue'
   import RoleEditDialog from './modules/role-edit-dialog.vue'
   import RolePermissionDialog from './modules/role-permission-dialog.vue'
-  import { ElTag, ElMessage, ElMessageBox } from 'element-plus'
+  import { ElSwitch, ElTag, ElMessage, ElMessageBox } from 'element-plus'
 
   defineOptions({ name: 'Role' })
 
@@ -83,6 +89,7 @@
     data,
     loading,
     pagination,
+    searchParams,
     getData,
     replaceSearchParams,
     resetSearchParams,
@@ -129,16 +136,11 @@
           prop: 'enabled',
           label: '角色状态',
           width: 100,
-          formatter: (row) => {
-            const statusConfig = row.enabled
-              ? { type: 'success', text: '启用' }
-              : { type: 'warning', text: '禁用' }
-            return h(
-              ElTag,
-              { type: statusConfig.type as 'success' | 'warning' },
-              () => statusConfig.text
-            )
-          }
+          formatter: (row) =>
+            h(ElSwitch, {
+              modelValue: row.enabled,
+              onChange: (enabled: string | number | boolean) => updateRoleStatus(row, Boolean(enabled))
+            })
         },
         {
           prop: 'createTime',
@@ -237,5 +239,17 @@
       .catch(() => {
         ElMessage.info('已取消删除')
       })
+  }
+
+  const updateRoleStatus = async (row: RoleListItem, enabled: boolean) => {
+    const previous = row.enabled
+    row.enabled = enabled
+    try {
+      await fetchUpdateRoleStatus({ roleId: row.roleId, enabled })
+      ElMessage.success(enabled ? '已启用' : '已禁用')
+    } catch (error) {
+      row.enabled = previous
+      throw error
+    }
   }
 </script>

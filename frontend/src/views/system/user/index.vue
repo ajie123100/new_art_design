@@ -14,6 +14,7 @@
         <template #left>
           <ElSpace wrap>
             <ElButton @click="showDialog('add')" v-ripple>新增用户</ElButton>
+            <ElButton @click="fetchExportUser(searchParams)">导出</ElButton>
           </ElSpace>
         </template>
       </ArtTableHeader>
@@ -44,10 +45,18 @@
 <script setup lang="ts">
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import { useTable } from '@/hooks/core/useTable'
-  import { fetchCreateUser, fetchDeleteUser, fetchGetUserList, fetchUpdateUser } from '@/api/system-manage'
+  import {
+    fetchCreateUser,
+    fetchDeleteUser,
+    fetchExportUser,
+    fetchGetUserList,
+    fetchResetUserPassword,
+    fetchUpdateUser,
+    fetchUpdateUserStatus
+  } from '@/api/system-manage'
   import UserSearch from './modules/user-search.vue'
   import UserDialog from './modules/user-dialog.vue'
-  import { ElTag, ElMessage, ElMessageBox, ElImage } from 'element-plus'
+  import { ElSwitch, ElMessage, ElMessageBox, ElImage } from 'element-plus'
   import { DialogType } from '@/types'
 
   defineOptions({ name: 'User' })
@@ -71,30 +80,13 @@
     status: '1'
   })
 
-  // 用户状态配置
-  const USER_STATUS_CONFIG = {
-    '1': { type: 'success' as const, text: '正常' },
-    '2': { type: 'danger' as const, text: '停用' }
-  } as const
-
-  /**
-   * 获取用户状态配置
-   */
-  const getUserStatusConfig = (status: string) => {
-    return (
-      USER_STATUS_CONFIG[status as keyof typeof USER_STATUS_CONFIG] || {
-        type: 'info' as const,
-        text: '未知'
-      }
-    )
-  }
-
   const {
     columns,
     columnChecks,
     data,
     loading,
     pagination,
+    searchParams,
     getData,
     replaceSearchParams,
     resetSearchParams,
@@ -145,8 +137,10 @@
           prop: 'status',
           label: '状态',
           formatter: (row) => {
-            const statusConfig = getUserStatusConfig(row.status)
-            return h(ElTag, { type: statusConfig.type }, () => statusConfig.text)
+            return h(ElSwitch, {
+              modelValue: row.status === '1',
+              onChange: (enabled: string | number | boolean) => updateUserStatus(row, Boolean(enabled))
+            })
           }
         },
         {
@@ -157,10 +151,17 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 120,
+          width: 160,
           fixed: 'right', // 固定列
           formatter: (row) =>
             h('div', [
+              h(ArtButtonTable, {
+                type: 'view',
+                icon: 'ri:key-2-line',
+                iconClass: 'bg-warning/12 text-warning',
+                title: '重置密码',
+                onClick: () => resetPassword(row)
+              }),
               h(ArtButtonTable, {
                 type: 'edit',
                 onClick: () => showDialog('edit', row)
@@ -207,6 +208,31 @@
       await fetchDeleteUser(row.id)
       ElMessage.success('删除成功')
       getData()
+    })
+  }
+
+  const updateUserStatus = async (row: UserListItem, enabled: boolean) => {
+    const previous = row.status
+    row.status = enabled ? '1' : '2'
+    try {
+      await fetchUpdateUserStatus({ id: row.id, status: row.status })
+      ElMessage.success(enabled ? '已启用' : '已停用')
+    } catch (error) {
+      row.status = previous
+      throw error
+    }
+  }
+
+  const resetPassword = (row: UserListItem) => {
+    ElMessageBox.prompt(`请输入 "${row.userName}" 的新密码`, '重置密码', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: '123456',
+      inputValidator: (value) => Boolean(value && value.length >= 6),
+      inputErrorMessage: '密码至少 6 位'
+    }).then(async ({ value }) => {
+      await fetchResetUserPassword({ id: row.id, password: value })
+      ElMessage.success('密码已重置')
     })
   }
 

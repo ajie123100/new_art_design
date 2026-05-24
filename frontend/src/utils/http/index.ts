@@ -39,6 +39,7 @@ interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
   showErrorMessage?: boolean
   showSuccessMessage?: boolean
   skipAuthRefresh?: boolean
+  rawResponse?: boolean
   _retry?: boolean
 }
 
@@ -92,6 +93,9 @@ axiosInstance.interceptors.request.use(
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
   async (response: AxiosResponse<BaseResponse>) => {
+    if ((response.config as ExtendedAxiosRequestConfig).rawResponse) {
+      return response
+    }
     const { code, msg } = response.data
     if (code === ApiStatus.success) return response
     if (code === ApiStatus.unauthorized) return handleUnauthorizedResponse(response, msg)
@@ -278,6 +282,50 @@ async function request<T = any>(config: ExtendedAxiosRequestConfig): Promise<T> 
   }
 }
 
+function resolveDownloadFilename(response: AxiosResponse, fallback: string): string {
+  const disposition = response.headers['content-disposition']
+  if (!disposition) return fallback
+
+  const encodedMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1])
+  }
+
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  return match?.[1] ? decodeURIComponent(match[1]) : fallback
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+async function download(config: ExtendedAxiosRequestConfig & { filename?: string }): Promise<void> {
+  try {
+    const response = await axiosInstance.request<Blob>({
+      ...config,
+      method: config.method || 'GET',
+      responseType: 'blob',
+      rawResponse: true
+    } as ExtendedAxiosRequestConfig)
+
+    const filename = resolveDownloadFilename(response, config.filename || 'download')
+    saveBlob(response.data, filename)
+  } catch (error) {
+    if (error instanceof HttpError && error.code !== ApiStatus.unauthorized) {
+      const showMsg = config.showErrorMessage !== false
+      showError(error, showMsg)
+    }
+    return Promise.reject(error)
+  }
+}
+
 /** API方法集合 */
 const api = {
   get<T>(config: ExtendedAxiosRequestConfig) {
@@ -294,7 +342,8 @@ const api = {
   },
   request<T>(config: ExtendedAxiosRequestConfig) {
     return retryRequest<T>(config)
-  }
+  },
+  download
 }
 
 export default api

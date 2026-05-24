@@ -59,6 +59,11 @@ declare namespace Api {
       total: number
     }
 
+    interface ImportResult {
+      imported: number
+      skipped: number
+    }
+
     /** 启用状态 */
     type EnableStatus = '1' | '2'
   }
@@ -262,5 +267,267 @@ declare namespace Api {
           endTime: string | null
         }
     >
+
+    type ImportResult = Api.Common.ImportResult
+
+    interface ConfigListItem {
+      configId: number
+      configName: string
+      configKey: string
+      configValue: string
+      configType: string
+      createTime: string
+    }
+
+    type ConfigList = Api.Common.PaginatedResponse<ConfigListItem>
+
+    interface ConfigSaveParams {
+      configId?: number
+      configName: string
+      configKey: string
+      configValue: string
+      configType?: string
+      remark?: string
+    }
+
+    type ConfigSearchParams = Partial<
+      Pick<ConfigListItem, 'configName' | 'configKey' | 'configType'> & Api.Common.CommonSearchParams
+    >
+
+    interface DictTypeListItem {
+      dictId: number
+      dictName: string
+      dictType: string
+      enabled: boolean
+      remark: string
+      createTime: string
+      updateTime: string
+    }
+
+    type DictTypeList = Api.Common.PaginatedResponse<DictTypeListItem>
+
+    interface DictTypeSaveParams {
+      dictId?: number
+      dictName: string
+      dictType: string
+      enabled?: boolean
+      remark?: string
+    }
+
+    type DictTypeSearchParams = Partial<
+      Pick<DictTypeListItem, 'dictName' | 'dictType' | 'enabled'> & Api.Common.CommonSearchParams
+    >
+
+    interface DictDataListItem {
+      dictCode: number
+      dictSort: number
+      dictLabel: string
+      dictValue: string
+      dictType: string
+      cssClass: string
+      listClass: string
+      defaultValue: boolean
+      enabled: boolean
+      remark: string
+      createTime: string
+      updateTime: string
+    }
+
+    type DictDataList = Api.Common.PaginatedResponse<DictDataListItem>
+
+    interface DictDataSaveParams {
+      dictCode?: number
+      dictSort: number
+      dictLabel: string
+      dictValue: string
+      dictType: string
+      cssClass?: string
+      listClass?: string
+      defaultValue?: boolean
+      enabled?: boolean
+      remark?: string
+    }
+
+    type DictDataSearchParams = Partial<
+      Pick<DictDataListItem, 'dictLabel' | 'dictType' | 'enabled'> & Api.Common.CommonSearchParams
+    >
+
+    interface PostListItem {
+      postId: number
+      postCode: string
+      postName: string
+      postSort: number
+      enabled: boolean
+      createTime: string
+    }
+
+    type PostList = Api.Common.PaginatedResponse<PostListItem>
+
+    interface PostSaveParams {
+      postId?: number
+      postCode: string
+      postName: string
+      postSort?: number
+      enabled?: boolean
+      remark?: string
+    }
+
+    type PostSearchParams = Partial<
+      Pick<PostListItem, 'postCode' | 'postName' | 'enabled'> & Api.Common.CommonSearchParams
+    >
+
+    interface NoticeListItem {
+      noticeId: number
+      noticeTitle: string
+      noticeType: string
+      status: string
+      createTime: string
+    }
+
+    type NoticeList = Api.Common.PaginatedResponse<NoticeListItem>
+
+    interface NoticeSaveParams {
+      noticeId?: number
+      noticeTitle: string
+      noticeType: string
+      noticeContent?: string
+      status?: string
+      remark?: string
+    }
+
+    type NoticeSearchParams = Partial<
+      Pick<NoticeListItem, 'noticeTitle' | 'noticeType' | 'status'> & Api.Common.CommonSearchParams
+    >
+
+    interface FileUploadResult {
+      url: string
+    }
+  }
+
+  namespace Monitor {
+    interface OnlineUser {
+      tokenId: string
+      loginName: string
+      deptName: string
+      ipaddr: string
+      loginLocation: string
+      browser: string
+      os: string
+      loginTime: string
+      device: string
+    }
+
+    interface CacheInfo {
+      commandStats: string
+      dbSize: string
+      info: string
+      keys: string
+      properties: Record<string, unknown>
+    }
+
+    interface CacheNameInfo {
+      cacheName: string
+      keyCount: number
+    }
+
+    interface DatabaseInfo {
+      databaseProductName: string
+      databaseProductVersion: string
+      driverName: string
+      driverVersion: string
+      url: string
+      userName: string
+      maxConnections: number
+      activeConnections: number
+      idleConnections: number
+    }
+
+    interface ServerInfo {
+      cpu: { load: number; count: number }
+      memory: { total: number; used: number; free: number; usedPercent: number }
+      jvm: {
+        name: string
+        version: string
+        total: number
+        used: number
+        free: number
+        usedPercent: number
+        inputDir: string
+        start: string
+        runTime: number
+      }
+      sys: { hostname: string; osname: string; userDir: string }
+      sysFile: Array<{ dir: string; total: number; used: number; free: number; freePercent: number }>
+    }
+
+    interface JobListItem {
+      jobId: number
+      jobName: string
+      jobGroup: string
+      invokeTarget: string
+      cronExpression: string
+      status: string
+      createTime: string
+    }
+
+    type JobList = Api.Common.PaginatedResponse<JobListItem>
+    type JobSearchParams = Partial<Pick<JobListItem, 'jobName' | 'jobGroup' | 'status'> & Api.Common.CommonSearchParams>
+
+    interface JobSaveParams {
+      jobId?: number
+      jobName: string
+      jobGroup?: string
+      invokeTarget: string
+      cronExpression: string
+      misfirePolicy?: string
+      concurrent?: string
+      status?: string
+      remark?: string
+    }
+
+    interface JobLogListItem {
+      jobLogId: number
+      jobName: string
+      jobGroup: string
+      invokeTarget: string
+      jobMessage: string
+      status: string
+      elapsedMs: number
+      createTime: string
+    }
+
+    type JobLogList = Api.Common.PaginatedResponse<JobLogListItem>
+    type JobLogSearchParams = Partial<Pick<JobLogListItem, 'jobName' | 'jobGroup' | 'status'> & Api.Common.CommonSearchParams>
+
+    interface LoginLogListItem {
+      infoId: number
+      userName: string
+      ipaddr: string
+      browser: string
+      os: string
+      status: string
+      msg: string
+      loginTime: string
+    }
+
+    type LoginLogList = Api.Common.PaginatedResponse<LoginLogListItem>
+    type LoginLogSearchParams = Partial<Pick<LoginLogListItem, 'userName' | 'ipaddr' | 'status'> & Api.Common.CommonSearchParams>
+
+    interface OperLogListItem {
+      operId: number
+      title: string
+      businessType: number
+      operName: string
+      operIp: string
+      operUrl: string
+      operParam: string
+      status: string
+      errorMsg: string
+      costTime: number
+      operTime: string
+    }
+
+    type OperLogList = Api.Common.PaginatedResponse<OperLogListItem>
+    type OperLogSearchParams = Partial<Pick<OperLogListItem, 'title' | 'operName' | 'status'> & Api.Common.CommonSearchParams>
   }
 }
