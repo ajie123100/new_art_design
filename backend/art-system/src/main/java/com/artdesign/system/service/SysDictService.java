@@ -1,18 +1,24 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
+import com.artdesign.system.domain.dto.DictDataExcel;
 import com.artdesign.system.domain.dto.DictDataListItem;
 import com.artdesign.system.domain.dto.DictDataSaveRequest;
 import com.artdesign.system.domain.dto.DictDataStatusRequest;
+import com.artdesign.system.domain.dto.DictTypeExcel;
 import com.artdesign.system.domain.dto.DictTypeListItem;
 import com.artdesign.system.domain.dto.DictTypeSaveRequest;
 import com.artdesign.system.domain.dto.DictTypeStatusRequest;
+import com.artdesign.system.domain.dto.ImportResult;
 import com.artdesign.system.domain.entity.SysDictData;
 import com.artdesign.system.domain.entity.SysDictType;
 import com.artdesign.system.mapper.SysDictDataMapper;
 import com.artdesign.system.mapper.SysDictTypeMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,22 +41,68 @@ public class SysDictService {
     }
 
     public PageResult<DictTypeListItem> listDictTypes(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<DictTypeListItem> records = dictTypeMapper.selectList(new LambdaQueryWrapper<SysDictType>()
+        Page<SysDictType> page = new Page<>(current, size);
+        IPage<SysDictType> result = dictTypeMapper.selectPage(page, new LambdaQueryWrapper<SysDictType>()
+                .like(hasText(params.get("dictName")), SysDictType::getDictName, params.get("dictName"))
+                .like(hasText(params.get("dictType")), SysDictType::getDictType, params.get("dictType"))
+                .eq(hasText(params.get("enabled")), SysDictType::getStatus, booleanToStatus(params.get("enabled")))
+                .orderByAsc(SysDictType::getDictId));
+
+        List<DictTypeListItem> records = result.getRecords().stream()
+                .map(this::toDictTypeListItem)
+                .toList();
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
+    }
+
+    public DictTypeListItem getDictType(Long dictId) {
+        return toDictTypeListItem(findDictType(dictId));
+    }
+
+    public List<DictTypeExcel> exportDictTypes(Map<String, String> params) {
+        return dictTypeMapper.selectList(new LambdaQueryWrapper<SysDictType>()
                         .like(hasText(params.get("dictName")), SysDictType::getDictName, params.get("dictName"))
                         .like(hasText(params.get("dictType")), SysDictType::getDictType, params.get("dictType"))
                         .eq(hasText(params.get("enabled")), SysDictType::getStatus, booleanToStatus(params.get("enabled")))
                         .orderByAsc(SysDictType::getDictId))
                 .stream()
-                .map(this::toDictTypeListItem)
+                .map(this::toDictTypeExcel)
                 .toList();
-        return page(records, current, size);
     }
 
-    public DictTypeListItem getDictType(Long dictId) {
-        return toDictTypeListItem(findDictType(dictId));
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importDictTypes(List<DictTypeExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入字典类型不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (DictTypeExcel row : rows) {
+            if (row == null || !hasText(row.dictType) || !hasText(row.dictName)) {
+                skipped++;
+                continue;
+            }
+            SysDictType existing = findImportDictType(row);
+            DictTypeSaveRequest request = new DictTypeSaveRequest(
+                    existing == null ? row.dictId : existing.getDictId(),
+                    row.dictName,
+                    row.dictType,
+                    parseBoolean(row.enabled, true),
+                    row.remark
+            );
+            if (existing == null) {
+                createDictType(request);
+            } else {
+                updateDictType(request);
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入字典类型没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -98,6 +150,7 @@ public class SysDictService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateDictTypeStatus(DictTypeStatusRequest request) {
         SysDictType dictType = findDictType(request.dictId());
         dictType.setStatus(booleanToStatus(request.enabled()));
@@ -107,19 +160,21 @@ public class SysDictService {
     }
 
     public PageResult<DictDataListItem> listDictData(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<DictDataListItem> records = dictDataMapper.selectList(new LambdaQueryWrapper<SysDictData>()
-                        .eq(hasText(params.get("dictType")), SysDictData::getDictType, params.get("dictType"))
-                        .like(hasText(params.get("dictLabel")), SysDictData::getDictLabel, params.get("dictLabel"))
-                        .eq(hasText(params.get("enabled")), SysDictData::getStatus, booleanToStatus(params.get("enabled")))
-                        .orderByAsc(SysDictData::getDictSort)
-                        .orderByAsc(SysDictData::getDictCode))
-                .stream()
+        Page<SysDictData> page = new Page<>(current, size);
+        IPage<SysDictData> result = dictDataMapper.selectPage(page, new LambdaQueryWrapper<SysDictData>()
+                .eq(hasText(params.get("dictType")), SysDictData::getDictType, params.get("dictType"))
+                .like(hasText(params.get("dictLabel")), SysDictData::getDictLabel, params.get("dictLabel"))
+                .eq(hasText(params.get("enabled")), SysDictData::getStatus, booleanToStatus(params.get("enabled")))
+                .orderByAsc(SysDictData::getDictSort)
+                .orderByAsc(SysDictData::getDictCode));
+
+        List<DictDataListItem> records = result.getRecords().stream()
                 .map(this::toDictDataListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public List<DictDataListItem> listDictDataByType(String dictType) {
@@ -138,6 +193,57 @@ public class SysDictService {
 
     public DictDataListItem getDictData(Long dictCode) {
         return toDictDataListItem(findDictData(dictCode));
+    }
+
+    public List<DictDataExcel> exportDictData(Map<String, String> params) {
+        return dictDataMapper.selectList(new LambdaQueryWrapper<SysDictData>()
+                        .eq(hasText(params.get("dictType")), SysDictData::getDictType, params.get("dictType"))
+                        .like(hasText(params.get("dictLabel")), SysDictData::getDictLabel, params.get("dictLabel"))
+                        .eq(hasText(params.get("enabled")), SysDictData::getStatus, booleanToStatus(params.get("enabled")))
+                        .orderByAsc(SysDictData::getDictType)
+                        .orderByAsc(SysDictData::getDictSort)
+                        .orderByAsc(SysDictData::getDictCode))
+                .stream()
+                .map(this::toDictDataExcel)
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importDictData(List<DictDataExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入字典数据不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (DictDataExcel row : rows) {
+            if (row == null || !hasText(row.dictType) || !hasText(row.dictLabel) || !hasText(row.dictValue)) {
+                skipped++;
+                continue;
+            }
+            SysDictData existing = findImportDictData(row);
+            DictDataSaveRequest request = new DictDataSaveRequest(
+                    existing == null ? row.dictCode : existing.getDictCode(),
+                    row.dictSort == null ? 0 : row.dictSort,
+                    row.dictLabel,
+                    row.dictValue,
+                    row.dictType,
+                    row.cssClass,
+                    row.listClass,
+                    parseBoolean(row.defaultValue, false),
+                    parseBoolean(row.enabled, true),
+                    row.remark
+            );
+            if (existing == null) {
+                createDictData(request);
+            } else {
+                updateDictData(request);
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入字典数据没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -175,6 +281,7 @@ public class SysDictService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateDictDataStatus(DictDataStatusRequest request) {
         SysDictData dictData = findDictData(request.dictCode());
         dictData.setStatus(booleanToStatus(request.enabled()));
@@ -197,6 +304,31 @@ public class SysDictService {
             throw new BusinessException("字典数据不存在");
         }
         return dictData;
+    }
+
+    private SysDictType findImportDictType(DictTypeExcel row) {
+        if (row.dictId != null) {
+            SysDictType dictType = dictTypeMapper.selectById(row.dictId);
+            if (dictType != null) {
+                return dictType;
+            }
+        }
+        return dictTypeMapper.selectOne(new LambdaQueryWrapper<SysDictType>()
+                .eq(SysDictType::getDictType, row.dictType)
+                .last("LIMIT 1"));
+    }
+
+    private SysDictData findImportDictData(DictDataExcel row) {
+        if (row.dictCode != null) {
+            SysDictData dictData = dictDataMapper.selectById(row.dictCode);
+            if (dictData != null) {
+                return dictData;
+            }
+        }
+        return dictDataMapper.selectOne(new LambdaQueryWrapper<SysDictData>()
+                .eq(SysDictData::getDictType, row.dictType)
+                .eq(SysDictData::getDictValue, row.dictValue)
+                .last("LIMIT 1"));
     }
 
     private void ensureUniqueDictType(String dictType, Long ignoredDictId) {
@@ -258,6 +390,17 @@ public class SysDictService {
         );
     }
 
+    private DictTypeExcel toDictTypeExcel(SysDictType dictType) {
+        DictTypeExcel excel = new DictTypeExcel();
+        excel.dictId = dictType.getDictId();
+        excel.dictName = dictType.getDictName();
+        excel.dictType = dictType.getDictType();
+        excel.enabled = Objects.equals(dictType.getStatus(), "1") ? "是" : "否";
+        excel.remark = dictType.getRemark();
+        excel.createTime = formatDateTime(dictType.getCreateTime());
+        return excel;
+    }
+
     private DictDataListItem toDictDataListItem(SysDictData dictData) {
         return new DictDataListItem(
                 dictData.getDictCode(),
@@ -275,10 +418,19 @@ public class SysDictService {
         );
     }
 
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
+    private DictDataExcel toDictDataExcel(SysDictData dictData) {
+        DictDataExcel excel = new DictDataExcel();
+        excel.dictCode = dictData.getDictCode();
+        excel.dictSort = dictData.getDictSort();
+        excel.dictLabel = dictData.getDictLabel();
+        excel.dictValue = dictData.getDictValue();
+        excel.dictType = dictData.getDictType();
+        excel.cssClass = dictData.getCssClass();
+        excel.listClass = dictData.getListClass();
+        excel.defaultValue = Objects.equals(dictData.getIsDefault(), "Y") ? "是" : "否";
+        excel.enabled = Objects.equals(dictData.getStatus(), "1") ? "是" : "否";
+        excel.remark = dictData.getRemark();
+        return excel;
     }
 
     private String formatDateTime(LocalDateTime dateTime) {
@@ -293,15 +445,21 @@ public class SysDictService {
         return Objects.equals(enabled, "true") ? "1" : "2";
     }
 
-    private long parseLong(String value, long fallback) {
+    private Boolean parseBoolean(String value, boolean fallback) {
         if (!hasText(value)) {
             return fallback;
         }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        return Objects.equals(value, "1")
+                || Objects.equals(value, "Y")
+                || Objects.equals(value, "是")
+                || Objects.equals(value, "启用")
+                || Objects.equals(value, "true")
+                || Objects.equals(value, "TRUE");
+    }
+
+    private long parseLong(String value, long fallback) {
+        if (!hasText(value)) return fallback;
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return fallback; }
     }
 
     private boolean hasText(String value) {

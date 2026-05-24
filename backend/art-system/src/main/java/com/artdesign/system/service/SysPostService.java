@@ -1,13 +1,17 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
 import com.artdesign.system.domain.dto.PostListItem;
 import com.artdesign.system.domain.dto.PostSaveRequest;
 import com.artdesign.system.domain.entity.SysPost;
 import com.artdesign.system.mapper.SysPostMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,10 +30,11 @@ public class SysPostService {
     }
 
     public PageResult<PostListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<SysPost> posts = postMapper.selectList(new LambdaQueryWrapper<SysPost>()
+        Page<SysPost> page = new Page<>(current, size);
+        IPage<SysPost> result = postMapper.selectPage(page, new LambdaQueryWrapper<SysPost>()
                 .like(hasText(params.get("postName")), SysPost::getPostName, params.get("postName"))
                 .like(hasText(params.get("postCode")), SysPost::getPostCode, params.get("postCode"))
                 .eq(hasText(params.get("status")), SysPost::getStatus, params.get("status"))
@@ -37,10 +42,10 @@ public class SysPostService {
                 .orderByAsc(SysPost::getPostSort)
                 .orderByAsc(SysPost::getPostId));
 
-        List<PostListItem> records = posts.stream()
+        List<PostListItem> records = result.getRecords().stream()
                 .map(this::toListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public PostListItem get(Long postId) {
@@ -57,6 +62,7 @@ public class SysPostService {
                 .toList();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Long create(PostSaveRequest request) {
         ensureUniqueCode(request.postCode(), null);
         SysPost post = new SysPost();
@@ -71,6 +77,7 @@ public class SysPostService {
         return post.getPostId();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void update(PostSaveRequest request) {
         if (request.postId() == null) {
             throw new BusinessException("岗位ID不能为空");
@@ -85,12 +92,17 @@ public class SysPostService {
         postMapper.updateById(post);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> postIds) {
         if (postIds == null || postIds.isEmpty()) {
             throw new BusinessException("请选择要删除的岗位");
         }
         for (Long postId : postIds) {
             SysPost post = findPost(postId);
+            Long userCount = postMapper.countUsersByPostId(postId);
+            if (userCount != null && userCount > 0) {
+                throw new BusinessException("岗位[" + post.getPostName() + "]已分配用户，不能删除");
+            }
             post.setDelFlag("1");
             post.setUpdateBy("system");
             post.setUpdateTime(LocalDateTime.now());
@@ -136,12 +148,6 @@ public class SysPostService {
     private int nextSort() {
         Long count = postMapper.selectCount(new LambdaQueryWrapper<SysPost>().eq(SysPost::getDelFlag, "0"));
         return count.intValue() + 1;
-    }
-
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
     }
 
     private String formatDateTime(LocalDateTime dateTime) {

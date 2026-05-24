@@ -1,11 +1,16 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.system.domain.dto.OperLogListItem;
 import com.artdesign.system.domain.entity.SysOperLog;
 import com.artdesign.system.mapper.SysOperLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -22,27 +27,31 @@ public class SysOperLogService {
         this.operLogMapper = operLogMapper;
     }
 
+    @Async
     public void record(SysOperLog operLog) {
         operLogMapper.insert(operLog);
     }
 
     public PageResult<OperLogListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<SysOperLog> logs = operLogMapper.selectList(new LambdaQueryWrapper<SysOperLog>()
-                .like(hasText(params.get("title")), SysOperLog::getTitle, params.get("title"))
-                .like(hasText(params.get("operName")), SysOperLog::getOperName, params.get("operName"))
-                .like(hasText(params.get("operIp")), SysOperLog::getOperIp, params.get("operIp"))
-                .eq(hasText(params.get("businessType")), SysOperLog::getBusinessType, Integer.valueOf(params.get("businessType")))
-                .ge(hasText(params.get("beginTime")), SysOperLog::getOperTime, params.get("beginTime"))
-                .le(hasText(params.get("endTime")), SysOperLog::getOperTime, params.get("endTime"))
-                .orderByDesc(SysOperLog::getOperTime));
+        Page<SysOperLog> page = new Page<>(current, size);
+        IPage<SysOperLog> result = operLogMapper.selectPage(page, buildQuery(params));
 
-        List<OperLogListItem> records = logs.stream()
+        List<OperLogListItem> records = result.getRecords().stream()
                 .map(this::toOperLogListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
+    }
+
+    public List<OperLogListItem> exportList(Map<String, String> params) {
+        return operLogMapper.selectList(buildQuery(params)).stream().map(this::toOperLogListItem).toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void clean() {
+        operLogMapper.delete(new LambdaQueryWrapper<>());
     }
 
     private OperLogListItem toOperLogListItem(SysOperLog log) {
@@ -61,25 +70,26 @@ public class SysOperLogService {
         );
     }
 
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
-    }
-
     private String formatDateTime(LocalDateTime dateTime) {
         return dateTime == null ? "" : DATE_TIME.format(dateTime);
     }
 
+    private LambdaQueryWrapper<SysOperLog> buildQuery(Map<String, String> params) {
+        Map<String, String> queryParams = params == null ? Map.of() : params;
+        Integer businessType = hasText(queryParams.get("businessType")) ? Integer.valueOf(queryParams.get("businessType")) : null;
+        return new LambdaQueryWrapper<SysOperLog>()
+                .like(hasText(queryParams.get("title")), SysOperLog::getTitle, queryParams.get("title"))
+                .like(hasText(queryParams.get("operName")), SysOperLog::getOperName, queryParams.get("operName"))
+                .like(hasText(queryParams.get("operIp")), SysOperLog::getOperIp, queryParams.get("operIp"))
+                .eq(businessType != null, SysOperLog::getBusinessType, businessType)
+                .ge(hasText(queryParams.get("beginTime")), SysOperLog::getOperTime, queryParams.get("beginTime"))
+                .le(hasText(queryParams.get("endTime")), SysOperLog::getOperTime, queryParams.get("endTime"))
+                .orderByDesc(SysOperLog::getOperTime);
+    }
+
     private long parseLong(String value, long fallback) {
-        if (!hasText(value)) {
-            return fallback;
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        if (!hasText(value)) return fallback;
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return fallback; }
     }
 
     private boolean hasText(String value) {

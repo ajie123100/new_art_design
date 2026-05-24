@@ -46,13 +46,16 @@ declare namespace Api {
     }
 
     /** 通用搜索参数 */
-    type CommonSearchParams = Pick<PaginationParams, 'current' | 'size'>
+    interface CommonSearchParams {
+      pageNum?: number
+      pageSize?: number
+    }
 
     /** 分页响应基础结构 */
     interface PaginatedResponse<T = any> {
       records: T[]
-      current: number
-      size: number
+      pageNum: number
+      pageSize: number
       total: number
     }
 
@@ -65,8 +68,8 @@ declare namespace Api {
     /** 验证码信息 */
     interface CaptchaInfo {
       captchaEnabled: boolean
-      uuid: string
-      img: string
+      uuid?: string | null
+      img?: string | null
     }
 
     /** 登录参数 */
@@ -80,6 +83,12 @@ declare namespace Api {
     /** 登录响应 */
     interface LoginResponse {
       token: string
+      refreshToken: string
+      expiresIn: number
+    }
+
+    /** 刷新令牌参数 */
+    interface RefreshTokenParams {
       refreshToken: string
     }
 
@@ -144,6 +153,7 @@ declare namespace Api {
       roleName: string
       roleCode: string
       description: string
+      dataScope: string
       enabled: boolean
       createTime: string
     }
@@ -154,8 +164,12 @@ declare namespace Api {
       roleName: string
       roleCode: string
       description?: string
+      dataScope?: string
+      deptIds?: number[]
       enabled?: boolean
     }
+
+    type RoleDataScope = '1' | '2' | '3' | '4' | '5'
 
     /** 角色菜单授权参数 */
     interface RoleMenuParams {

@@ -8,6 +8,7 @@ public record UserInfo(
         Long userId,
         String userName,
         String email,
-        String avatar
+        String avatar,
+        Boolean initialPassword
 ) {
 }

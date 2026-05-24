@@ -93,8 +93,8 @@
     core: {
       apiFn: fetchGetRoleList,
       apiParams: {
-        current: 1,
-        size: 20
+        pageNum: 1,
+        pageSize: 20
       },
       excludeParams: ['daterange'],
       columnsFactory: () => [
@@ -118,6 +118,12 @@
           label: '角色描述',
           minWidth: 150,
           showOverflowTooltip: true
+        },
+        {
+          prop: 'dataScope',
+          label: '数据权限',
+          minWidth: 130,
+          formatter: (row) => dataScopeLabel(row.dataScope)
         },
         {
           prop: 'enabled',
@@ -185,6 +191,17 @@
     const [startTime, endTime] = Array.isArray(daterange) ? daterange : [null, null]
     replaceSearchParams({ ...filtersParams, startTime, endTime })
     getData()
+  }
+
+  const dataScopeLabel = (scope?: string) => {
+    const labels: Record<string, string> = {
+      '1': '全部数据',
+      '2': '自定数据',
+      '3': '本部门',
+      '4': '本部门及以下',
+      '5': '仅本人'
+    }
+    return labels[scope || '1'] || '全部数据'
   }
 
   const buttonMoreClick = (item: ButtonMoreItem, row: RoleListItem) => {

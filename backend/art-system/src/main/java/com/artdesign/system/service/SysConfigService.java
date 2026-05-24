@@ -1,20 +1,28 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
+import com.artdesign.system.domain.dto.ConfigExcel;
 import com.artdesign.system.domain.dto.ConfigListItem;
 import com.artdesign.system.domain.dto.ConfigSaveRequest;
+import com.artdesign.system.domain.dto.ImportResult;
 import com.artdesign.system.domain.entity.SysConfig;
 import com.artdesign.system.mapper.SysConfigMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -31,29 +39,78 @@ public class SysConfigService {
     }
 
     public PageResult<ConfigListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<SysConfig> configs = configMapper.selectList(new LambdaQueryWrapper<SysConfig>()
+        Page<SysConfig> page = new Page<>(current, size);
+        IPage<SysConfig> result = configMapper.selectPage(page, new LambdaQueryWrapper<SysConfig>()
                 .like(hasText(params.get("configName")), SysConfig::getConfigName, params.get("configName"))
                 .like(hasText(params.get("configKey")), SysConfig::getConfigKey, params.get("configKey"))
                 .eq(hasText(params.get("configType")), SysConfig::getConfigType, params.get("configType"))
                 .orderByAsc(SysConfig::getConfigId));
 
-        List<ConfigListItem> records = configs.stream()
+        List<ConfigListItem> records = result.getRecords().stream()
                 .map(this::toListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public ConfigListItem get(Long configId) {
         return toListItem(findConfig(configId));
     }
 
+    public List<ConfigExcel> exportConfigs(Map<String, String> params) {
+        return configMapper.selectList(new LambdaQueryWrapper<SysConfig>()
+                        .like(hasText(params.get("configName")), SysConfig::getConfigName, params.get("configName"))
+                        .like(hasText(params.get("configKey")), SysConfig::getConfigKey, params.get("configKey"))
+                        .eq(hasText(params.get("configType")), SysConfig::getConfigType, params.get("configType"))
+                        .orderByAsc(SysConfig::getConfigId))
+                .stream()
+                .map(this::toConfigExcel)
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importConfigs(List<ConfigExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入参数不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (ConfigExcel row : rows) {
+            if (row == null || !hasText(row.configKey) || !hasText(row.configName)) {
+                skipped++;
+                continue;
+            }
+            SysConfig existing = findImportConfig(row);
+            ConfigSaveRequest request = new ConfigSaveRequest(
+                    existing == null ? row.configId : existing.getConfigId(),
+                    row.configName,
+                    row.configKey,
+                    defaultIfBlank(row.configValue, ""),
+                    normalizeConfigType(row.configType),
+                    row.remark
+            );
+            if (existing == null) {
+                create(request);
+            } else {
+                update(request);
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入参数没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
+    }
+
     public String getConfigKey(String configKey) {
-        Object value = redisTemplate.opsForValue().get(CONFIG_KEY_PREFIX + configKey);
-        if (value != null) {
-            return value.toString();
+        try {
+            Object value = redisTemplate.opsForValue().get(CONFIG_KEY_PREFIX + configKey);
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (Exception ignored) {
         }
         SysConfig config = configMapper.selectOne(new LambdaQueryWrapper<SysConfig>()
                 .eq(SysConfig::getConfigKey, configKey)
@@ -61,10 +118,11 @@ public class SysConfigService {
         if (config == null) {
             return null;
         }
-        redisTemplate.opsForValue().set(CONFIG_KEY_PREFIX + configKey, config.getConfigValue(), 30, TimeUnit.MINUTES);
+        cacheConfig(config);
         return config.getConfigValue();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Long create(ConfigSaveRequest request) {
         ensureUniqueKey(request.configKey(), null);
         SysConfig config = new SysConfig();
@@ -77,6 +135,7 @@ public class SysConfigService {
         return config.getConfigId();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void update(ConfigSaveRequest request) {
         if (request.configId() == null) {
             throw new BusinessException("参数ID不能为空");
@@ -91,6 +150,7 @@ public class SysConfigService {
         redisTemplate.opsForValue().set(CONFIG_KEY_PREFIX + config.getConfigKey(), config.getConfigValue(), 30, TimeUnit.MINUTES);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> configIds) {
         if (configIds == null || configIds.isEmpty()) {
             throw new BusinessException("请选择要删除的参数");
@@ -108,7 +168,23 @@ public class SysConfigService {
     public void loadConfigCache() {
         List<SysConfig> configs = configMapper.selectList(null);
         for (SysConfig config : configs) {
-            redisTemplate.opsForValue().set(CONFIG_KEY_PREFIX + config.getConfigKey(), config.getConfigValue(), 30, TimeUnit.MINUTES);
+            cacheConfig(config);
+        }
+    }
+
+    public void refreshConfigCache() {
+        var keys = redisTemplate.keys(CONFIG_KEY_PREFIX + "*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+        loadConfigCache();
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void loadConfigCacheOnReady() {
+        try {
+            loadConfigCache();
+        } catch (Exception ignored) {
         }
     }
 
@@ -131,11 +207,42 @@ public class SysConfigService {
         );
     }
 
+    private ConfigExcel toConfigExcel(SysConfig config) {
+        ConfigExcel excel = new ConfigExcel();
+        excel.configId = config.getConfigId();
+        excel.configName = config.getConfigName();
+        excel.configKey = config.getConfigKey();
+        excel.configValue = config.getConfigValue();
+        excel.configType = config.getConfigType();
+        excel.remark = config.getRemark();
+        excel.createTime = formatDateTime(config.getCreateTime());
+        return excel;
+    }
+
+    private SysConfig findImportConfig(ConfigExcel row) {
+        if (row.configId != null) {
+            SysConfig config = configMapper.selectById(row.configId);
+            if (config != null) {
+                return config;
+            }
+        }
+        return configMapper.selectOne(new LambdaQueryWrapper<SysConfig>()
+                .eq(SysConfig::getConfigKey, row.configKey)
+                .last("LIMIT 1"));
+    }
+
     private void fillConfig(SysConfig config, ConfigSaveRequest request) {
         config.setConfigName(request.configName());
         config.setConfigKey(request.configKey());
         config.setConfigValue(request.configValue());
         config.setRemark(defaultIfBlank(request.remark(), ""));
+    }
+
+    private void cacheConfig(SysConfig config) {
+        try {
+            redisTemplate.opsForValue().set(CONFIG_KEY_PREFIX + config.getConfigKey(), config.getConfigValue(), 30, TimeUnit.MINUTES);
+        } catch (Exception ignored) {
+        }
     }
 
     private void ensureUniqueKey(String configKey, Long ignoreId) {
@@ -145,12 +252,6 @@ public class SysConfigService {
         if (existing != null && !existing.getConfigId().equals(ignoreId)) {
             throw new BusinessException("参数键名已存在");
         }
-    }
-
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
     }
 
     private String formatDateTime(LocalDateTime dateTime) {
@@ -174,5 +275,12 @@ public class SysConfigService {
 
     private String defaultIfBlank(String value, String fallback) {
         return hasText(value) ? value : fallback;
+    }
+
+    private String normalizeConfigType(String configType) {
+        if (!hasText(configType)) {
+            return "N";
+        }
+        return Objects.equals(configType, "是") || Objects.equals(configType, "Y") ? "Y" : "N";
     }
 }

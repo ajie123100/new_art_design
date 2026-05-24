@@ -126,7 +126,7 @@ export const useUserStore = defineStore(
     /**
      * 设置令牌
      * @param newAccessToken 访问令牌
-     * @param newRefreshToken 刷新令牌（可选）
+     * @param newRefreshToken 刷新令牌
      */
     const setToken = (newAccessToken: string, newRefreshToken?: string) => {
       accessToken.value = newAccessToken

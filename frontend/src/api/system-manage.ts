@@ -130,6 +130,13 @@ export function fetchGetRoleMenuIds(roleId: number) {
   })
 }
 
+// 获取角色已授权部门 ID
+export function fetchGetRoleDeptIds(roleId: number) {
+  return request.get<number[]>({
+    url: `/api/role/${roleId}/dept-ids`
+  })
+}
+
 // 保存角色菜单授权
 export function fetchSaveRoleMenus(params: Api.SystemManage.RoleMenuParams) {
   return request.put<void>({

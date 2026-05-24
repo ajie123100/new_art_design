@@ -43,7 +43,6 @@
 
 <script setup lang="ts">
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
-  import { ACCOUNT_TABLE_DATA } from '@/mock/temp/formData'
   import { useTable } from '@/hooks/core/useTable'
   import { fetchCreateUser, fetchDeleteUser, fetchGetUserList, fetchUpdateUser } from '@/api/system-manage'
   import UserSearch from './modules/user-search.vue'
@@ -74,10 +73,8 @@
 
   // 用户状态配置
   const USER_STATUS_CONFIG = {
-    '1': { type: 'success' as const, text: '在线' },
-    '2': { type: 'info' as const, text: '离线' },
-    '3': { type: 'warning' as const, text: '异常' },
-    '4': { type: 'danger' as const, text: '注销' }
+    '1': { type: 'success' as const, text: '正常' },
+    '2': { type: 'danger' as const, text: '停用' }
   } as const
 
   /**
@@ -109,15 +106,10 @@
     core: {
       apiFn: fetchGetUserList,
       apiParams: {
-        current: 1,
-        size: 20,
+        pageNum: 1,
+        pageSize: 20,
         ...searchForm.value
       },
-      // 自定义分页字段映射，未设置时将使用全局配置 tableConfig.ts 中的 paginationKey
-      // paginationKey: {
-      //   current: 'pageNum',
-      //   size: 'pageSize'
-      // },
       columnsFactory: () => [
         { type: 'selection' }, // 勾选列
         { type: 'index', width: 60, label: '序号' }, // 序号
@@ -180,25 +172,6 @@
             ])
         }
       ]
-    },
-    // 数据处理
-    transform: {
-      // 数据转换器 - 替换头像
-      dataTransformer: (records) => {
-        // 类型守卫检查
-        if (!Array.isArray(records)) {
-          console.warn('数据转换器: 期望数组类型，实际收到:', typeof records)
-          return []
-        }
-
-        // 使用本地头像替换接口返回的头像
-        return records.map((item, index: number) => {
-          return {
-            ...item,
-            avatar: ACCOUNT_TABLE_DATA[index % ACCOUNT_TABLE_DATA.length].avatar
-          }
-        })
-      }
     }
   })
 
@@ -215,7 +188,6 @@
    * 显示用户弹窗
    */
   const showDialog = (type: DialogType, row?: UserListItem): void => {
-    console.log('打开弹窗:', { type, row })
     dialogType.value = type
     currentUserData.value = row || {}
     nextTick(() => {
@@ -227,7 +199,6 @@
    * 删除用户
    */
   const deleteUser = (row: UserListItem): void => {
-    console.log('删除用户:', row)
     ElMessageBox.confirm(`确定要删除该用户吗？`, '删除用户', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
@@ -253,8 +224,8 @@
       dialogVisible.value = false
       currentUserData.value = {}
       getData()
-    } catch (error) {
-      console.error('提交失败:', error)
+    } catch {
+      ElMessage.error(dialogType.value === 'add' ? '新增失败' : '更新失败')
     }
   }
 
@@ -263,6 +234,5 @@
    */
   const handleSelectionChange = (selection: UserListItem[]): void => {
     selectedRows.value = selection
-    console.log('选中行数据:', selectedRows.value)
   }
 </script>

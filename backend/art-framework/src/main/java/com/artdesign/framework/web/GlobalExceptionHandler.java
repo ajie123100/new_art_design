@@ -9,6 +9,8 @@ import com.artdesign.common.exception.DemoModeException;
 import com.artdesign.common.exception.ServiceException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -19,6 +21,7 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(BusinessException.class)
     public R<Void> handleBusinessException(BusinessException ex) {
         return R.fail(ex.getCode(), ex.getMessage());
@@ -84,6 +87,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public R<Void> handleException(Exception ex, HttpServletRequest request) {
-        return R.fail(HttpStatus.SERVER_ERROR, ex.getMessage());
+        log.error("服务端异常 [{} {}] ", request.getMethod(), request.getRequestURI(), ex);
+        return R.fail(HttpStatus.SERVER_ERROR, "服务器内部错误");
     }
 }

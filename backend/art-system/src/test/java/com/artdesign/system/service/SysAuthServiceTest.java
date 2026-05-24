@@ -45,6 +45,8 @@ class SysAuthServiceTest {
         assertThat(passwordEncoder.matches("123456", user.getPassword())).isTrue();
         assertThat(user.getUpdateBy()).isEqualTo("system");
         assertThat(user.getUpdateTime()).isNotNull();
+        assertThat(user.getLoginIp()).isEqualTo("");
+        assertThat(user.getLoginDate()).isNotNull();
         verify(userMapper).updateById(user);
     }
 
@@ -58,7 +60,8 @@ class SysAuthServiceTest {
         authService.login("Super", "123456");
 
         assertThat(user.getPassword()).isEqualTo(encryptedPassword);
-        verify(userMapper, never()).updateById(any(SysUser.class));
+        assertThat(user.getLoginDate()).isNotNull();
+        verify(userMapper).updateById(user);
     }
 
     @Test
@@ -97,6 +100,7 @@ class SysAuthServiceTest {
         assertThat(userInfo.roles()).containsExactly("R_ADMIN");
         assertThat(userInfo.buttons()).containsExactly("system:user:list");
         assertThat(userInfo.avatar()).isEqualTo("https://cube.elemecdn.com/e/fd/0fc7d20532fdaf769a25683617711png.png");
+        assertThat(userInfo.initialPassword()).isFalse();
     }
 
     private SysUser activeUser() {

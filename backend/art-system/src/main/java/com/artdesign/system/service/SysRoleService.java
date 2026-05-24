@@ -1,8 +1,11 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
 import com.artdesign.system.domain.dto.AppRouteRecord;
+import com.artdesign.system.domain.dto.ImportResult;
+import com.artdesign.system.domain.dto.RoleExcel;
 import com.artdesign.system.domain.dto.RoleListItem;
 import com.artdesign.system.domain.dto.RoleMenuRequest;
 import com.artdesign.system.domain.dto.RoleSaveRequest;
@@ -10,6 +13,8 @@ import com.artdesign.system.domain.dto.RoleStatusRequest;
 import com.artdesign.system.domain.entity.SysRole;
 import com.artdesign.system.mapper.SysRoleMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +23,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 @Service
 public class SysRoleService {
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Pattern ID_SPLITTER = Pattern.compile("[,，\\s]+");
 
     private final SysRoleMapper roleMapper;
     private final SysMenuService menuService;
@@ -32,10 +39,11 @@ public class SysRoleService {
     }
 
     public PageResult<RoleListItem> listRoles(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long pageNum = PageUtils.pageNum(params);
+        long pageSize = PageUtils.pageSize(params);
 
-        List<SysRole> roles = roleMapper.selectList(new LambdaQueryWrapper<SysRole>()
+        Page<SysRole> page = new Page<>(pageNum, pageSize);
+        IPage<SysRole> result = roleMapper.selectPage(page, new LambdaQueryWrapper<SysRole>()
                 .like(hasText(params.get("roleName")), SysRole::getRoleName, params.get("roleName"))
                 .like(hasText(params.get("roleCode")), SysRole::getRoleCode, params.get("roleCode"))
                 .eq(hasText(params.get("enabled")), SysRole::getStatus, booleanToStatus(params.get("enabled")))
@@ -43,14 +51,72 @@ public class SysRoleService {
                 .orderByAsc(SysRole::getRoleSort)
                 .orderByAsc(SysRole::getRoleId));
 
-        List<RoleListItem> records = roles.stream()
+        List<RoleListItem> records = result.getRecords().stream()
                 .map(this::toRoleListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public RoleListItem getRole(Long roleId) {
         return toRoleListItem(findRole(roleId));
+    }
+
+    public List<RoleExcel> exportRoles(Map<String, String> params) {
+        return roleMapper.selectList(new LambdaQueryWrapper<SysRole>()
+                        .like(hasText(params.get("roleName")), SysRole::getRoleName, params.get("roleName"))
+                        .like(hasText(params.get("roleCode")), SysRole::getRoleCode, params.get("roleCode"))
+                        .eq(hasText(params.get("enabled")), SysRole::getStatus, booleanToStatus(params.get("enabled")))
+                        .eq(SysRole::getDelFlag, "0")
+                        .orderByAsc(SysRole::getRoleSort)
+                        .orderByAsc(SysRole::getRoleId))
+                .stream()
+                .map(this::toRoleExcel)
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importRoles(List<RoleExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入角色不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (RoleExcel row : rows) {
+            if (row == null || !hasText(row.roleCode) || !hasText(row.roleName)) {
+                skipped++;
+                continue;
+            }
+            SysRole existing = findImportRole(row);
+            RoleSaveRequest request = new RoleSaveRequest(
+                    existing == null ? row.roleId : existing.getRoleId(),
+                    row.roleName,
+                    row.roleCode,
+                    row.remark,
+                    defaultIfBlank(row.dataScope, "1"),
+                    parseIds(row.deptIds),
+                    parseBoolean(row.enabled, true)
+            );
+            Long roleId;
+            if (existing == null) {
+                roleId = createRole(request);
+            } else {
+                updateRole(request);
+                roleId = existing.getRoleId();
+            }
+            if (row.roleSort != null) {
+                SysRole role = findRole(roleId);
+                role.setRoleSort(row.roleSort);
+                roleMapper.updateById(role);
+            }
+            if (row.menuIds != null) {
+                saveRoleMenus(new RoleMenuRequest(roleId, parseIds(row.menuIds)));
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入角色没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -64,6 +130,7 @@ public class SysRoleService {
         role.setCreateBy("system");
         role.setCreateTime(LocalDateTime.now());
         roleMapper.insert(role);
+        saveRoleDepts(role.getRoleId(), request);
         return role.getRoleId();
     }
 
@@ -79,6 +146,7 @@ public class SysRoleService {
         role.setUpdateBy("system");
         role.setUpdateTime(LocalDateTime.now());
         roleMapper.updateById(role);
+        saveRoleDepts(role.getRoleId(), request);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -96,9 +164,11 @@ public class SysRoleService {
             role.setUpdateTime(LocalDateTime.now());
             roleMapper.updateById(role);
             roleMapper.deleteRoleMenus(roleId);
+            roleMapper.deleteRoleDepts(roleId);
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateRoleStatus(RoleStatusRequest request) {
         SysRole role = findRole(request.roleId());
         role.setStatus(booleanToStatus(request.enabled()));
@@ -114,6 +184,11 @@ public class SysRoleService {
     public List<Long> getRoleMenuIds(Long roleId) {
         findRole(roleId);
         return roleMapper.selectMenuIdsByRoleId(roleId);
+    }
+
+    public List<Long> getRoleDeptIds(Long roleId) {
+        findRole(roleId);
+        return roleMapper.selectDeptIdsByRoleId(roleId);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -142,15 +217,55 @@ public class SysRoleService {
                 role.getRoleName(),
                 role.getRoleCode(),
                 role.getRemark(),
+                role.getDataScope(),
                 Objects.equals(role.getStatus(), "1"),
                 formatDateTime(role.getCreateTime())
         );
     }
 
+    private RoleExcel toRoleExcel(SysRole role) {
+        RoleExcel excel = new RoleExcel();
+        excel.roleId = role.getRoleId();
+        excel.roleName = role.getRoleName();
+        excel.roleCode = role.getRoleCode();
+        excel.roleSort = role.getRoleSort();
+        excel.dataScope = role.getDataScope();
+        excel.enabled = Objects.equals(role.getStatus(), "1") ? "是" : "否";
+        excel.deptIds = joinIds(roleMapper.selectDeptIdsByRoleId(role.getRoleId()));
+        excel.menuIds = joinIds(roleMapper.selectMenuIdsByRoleId(role.getRoleId()));
+        excel.remark = role.getRemark();
+        excel.createTime = formatDateTime(role.getCreateTime());
+        return excel;
+    }
+
+    private SysRole findImportRole(RoleExcel row) {
+        if (row.roleId != null) {
+            SysRole role = roleMapper.selectById(row.roleId);
+            if (role != null && Objects.equals(role.getDelFlag(), "0")) {
+                return role;
+            }
+        }
+        return roleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
+                .eq(SysRole::getRoleCode, row.roleCode)
+                .eq(SysRole::getDelFlag, "0")
+                .last("LIMIT 1"));
+    }
+
     private void fillRole(SysRole role, RoleSaveRequest request) {
         role.setRoleName(request.roleName());
         role.setRoleCode(request.roleCode());
+        role.setDataScope(defaultIfBlank(request.dataScope(), "1"));
         role.setRemark(defaultIfBlank(request.description(), ""));
+    }
+
+    private void saveRoleDepts(Long roleId, RoleSaveRequest request) {
+        roleMapper.deleteRoleDepts(roleId);
+        if (!Objects.equals(request.dataScope(), "2") || request.deptIds() == null || request.deptIds().isEmpty()) {
+            return;
+        }
+        for (Long deptId : request.deptIds()) {
+            roleMapper.insertRoleDept(roleId, deptId);
+        }
     }
 
     private void ensureUniqueRoleCode(String roleCode, Long ignoredRoleId) {
@@ -168,12 +283,6 @@ public class SysRoleService {
         return count.intValue() + 1;
     }
 
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
-    }
-
     private String formatDateTime(LocalDateTime dateTime) {
         return dateTime == null ? "" : DATE_TIME.format(dateTime);
     }
@@ -186,15 +295,39 @@ public class SysRoleService {
         return Boolean.FALSE.equals(enabled) ? "2" : "1";
     }
 
-    private long parseLong(String value, long fallback) {
+    private List<Long> parseIds(String ids) {
+        if (!hasText(ids)) {
+            return List.of();
+        }
+        return ID_SPLITTER.splitAsStream(ids)
+                .filter(this::hasText)
+                .map(Long::valueOf)
+                .toList();
+    }
+
+    private String joinIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return "";
+        }
+        return ids.stream()
+                .map(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private Boolean parseBoolean(String value, boolean fallback) {
         if (!hasText(value)) {
             return fallback;
         }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        return Objects.equals(value, "1")
+                || Objects.equals(value, "是")
+                || Objects.equals(value, "启用")
+                || Objects.equals(value, "true")
+                || Objects.equals(value, "TRUE");
+    }
+
+    private long parseLong(String value, long fallback) {
+        if (!hasText(value)) return fallback;
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return fallback; }
     }
 
     private boolean hasText(String value) {

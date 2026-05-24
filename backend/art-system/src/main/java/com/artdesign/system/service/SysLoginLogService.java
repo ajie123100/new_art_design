@@ -1,12 +1,16 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.enums.BusinessStatus;
 import com.artdesign.system.domain.dto.LoginLogListItem;
 import com.artdesign.system.domain.entity.SysLoginLog;
 import com.artdesign.system.mapper.SysLoginLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,21 +41,25 @@ public class SysLoginLogService {
     }
 
     public PageResult<LoginLogListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<SysLoginLog> logs = loginLogMapper.selectList(new LambdaQueryWrapper<SysLoginLog>()
-                .like(hasText(params.get("userName")), SysLoginLog::getUserName, params.get("userName"))
-                .like(hasText(params.get("ipaddr")), SysLoginLog::getIpaddr, params.get("ipaddr"))
-                .eq(hasText(params.get("status")), SysLoginLog::getStatus, params.get("status"))
-                .ge(hasText(params.get("beginTime")), SysLoginLog::getLoginTime, params.get("beginTime"))
-                .le(hasText(params.get("endTime")), SysLoginLog::getLoginTime, params.get("endTime"))
-                .orderByDesc(SysLoginLog::getLoginTime));
+        Page<SysLoginLog> page = new Page<>(current, size);
+        IPage<SysLoginLog> result = loginLogMapper.selectPage(page, buildQuery(params));
 
-        List<LoginLogListItem> records = logs.stream()
+        List<LoginLogListItem> records = result.getRecords().stream()
                 .map(this::toLoginLogListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
+    }
+
+    public List<LoginLogListItem> exportList(Map<String, String> params) {
+        return loginLogMapper.selectList(buildQuery(params)).stream().map(this::toLoginLogListItem).toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void clean() {
+        loginLogMapper.delete(new LambdaQueryWrapper<>());
     }
 
     private LoginLogListItem toLoginLogListItem(SysLoginLog log) {
@@ -67,65 +75,42 @@ public class SysLoginLogService {
         );
     }
 
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
-    }
-
     private String formatDateTime(LocalDateTime dateTime) {
         return dateTime == null ? "" : DATE_TIME.format(dateTime);
     }
 
+    private LambdaQueryWrapper<SysLoginLog> buildQuery(Map<String, String> params) {
+        Map<String, String> queryParams = params == null ? Map.of() : params;
+        return new LambdaQueryWrapper<SysLoginLog>()
+                .like(hasText(queryParams.get("userName")), SysLoginLog::getUserName, queryParams.get("userName"))
+                .like(hasText(queryParams.get("ipaddr")), SysLoginLog::getIpaddr, queryParams.get("ipaddr"))
+                .eq(hasText(queryParams.get("status")), SysLoginLog::getStatus, queryParams.get("status"))
+                .ge(hasText(queryParams.get("beginTime")), SysLoginLog::getLoginTime, queryParams.get("beginTime"))
+                .le(hasText(queryParams.get("endTime")), SysLoginLog::getLoginTime, queryParams.get("endTime"))
+                .orderByDesc(SysLoginLog::getLoginTime);
+    }
+
     private long parseLong(String value, long fallback) {
-        if (!hasText(value)) {
-            return fallback;
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        if (!hasText(value)) return fallback;
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return fallback; }
     }
 
     private String parseBrowser(String userAgent) {
-        if (!hasText(userAgent)) {
-            return "";
-        }
-        if (userAgent.contains("Edg/")) {
-            return "Edge";
-        }
-        if (userAgent.contains("Chrome/")) {
-            return "Chrome";
-        }
-        if (userAgent.contains("Firefox/")) {
-            return "Firefox";
-        }
-        if (userAgent.contains("Safari/")) {
-            return "Safari";
-        }
+        if (!hasText(userAgent)) return "";
+        if (userAgent.contains("Edg/")) return "Edge";
+        if (userAgent.contains("Chrome/")) return "Chrome";
+        if (userAgent.contains("Firefox/")) return "Firefox";
+        if (userAgent.contains("Safari/")) return "Safari";
         return "Unknown";
     }
 
     private String parseOs(String userAgent) {
-        if (!hasText(userAgent)) {
-            return "";
-        }
-        if (userAgent.contains("Windows")) {
-            return "Windows";
-        }
-        if (userAgent.contains("Mac OS")) {
-            return "Mac OS";
-        }
-        if (userAgent.contains("Linux")) {
-            return "Linux";
-        }
-        if (userAgent.contains("Android")) {
-            return "Android";
-        }
-        if (userAgent.contains("iPhone") || userAgent.contains("iPad")) {
-            return "iOS";
-        }
+        if (!hasText(userAgent)) return "";
+        if (userAgent.contains("Windows")) return "Windows";
+        if (userAgent.contains("Mac OS")) return "Mac OS";
+        if (userAgent.contains("Linux")) return "Linux";
+        if (userAgent.contains("Android")) return "Android";
+        if (userAgent.contains("iPhone") || userAgent.contains("iPad")) return "iOS";
         return "Unknown";
     }
 

@@ -64,6 +64,7 @@
   import { useRouter } from 'vue-router'
   import { ElMessageBox } from 'element-plus'
   import { useUserStore } from '@/store/modules/user'
+  import { fetchLogout } from '@/api/auth'
   import { WEB_LINKS } from '@/utils/constants'
   import { mittBus } from '@/utils/sys'
 
@@ -115,7 +116,12 @@
         confirmButtonText: t('common.confirm'),
         cancelButtonText: t('common.cancel'),
         customClass: 'login-out-dialog'
-      }).then(() => {
+      }).then(async () => {
+        try {
+          await fetchLogout({ refreshToken: userStore.refreshToken })
+        } catch {
+          // 本地退出优先，后端令牌回收失败不阻塞用户操作。
+        }
         userStore.logOut()
       })
     }, 200)

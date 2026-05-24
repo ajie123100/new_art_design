@@ -458,8 +458,8 @@
   // 缓存调试状态
   const cacheDebugLogs = ref<string[]>([])
   const requestParams = ref<any>({
-    current: 1,
-    size: 20,
+    pageNum: 1,
+    pageSize: 20,
     name: '',
     phone: '',
     status: '',
@@ -696,7 +696,7 @@
         // 在API调用前添加调试信息
         const requestKey = JSON.stringify(params)
         console.log('🚀 API 请求参数:', params)
-        addCacheLog(`🚀 API 请求: current=${params.current}, size=${params.size}`)
+        addCacheLog(`🚀 API 请求: pageNum=${params.pageNum}, pageSize=${params.pageSize}`)
         addCacheLog(`🔑 请求键: ${requestKey.substring(0, 100)}...`)
 
         // 记录缓存键（这里假设会被缓存）
@@ -705,17 +705,13 @@
         return fetchGetUserList(params)
       },
       apiParams: {
-        current: 1,
-        size: 20,
+        pageNum: 1,
+        pageSize: 20,
         ...searchFormState.value
       },
       // 排除 apiParams 中的属性
       excludeParams: ['daterange'],
       // 自定义分页字段映射，未设置时将使用全局配置 tableConfig.ts 中的 paginationKey
-      // paginationKey: {
-      //   current: 'pageNum',
-      //   size: 'pageSize'
-      // },
       immediate: true, // 是否立即加载数据
       columnsFactory: () => [
         // {
@@ -801,9 +797,9 @@
       }
       // 自定义响应适配器，处理后端特殊的返回格式
       // responseAdapter: (data) => {
-      //   const { list, total, pageNum, pageSize } = data
+      //   const { records, total, pageNum, pageSize } = data
       //   return {
-      //     records: list,
+      //     records,
       //     total: total,
       //     current: pageNum,
       //     size: pageSize
@@ -825,7 +821,7 @@
         console.log('📊 响应详情:', response)
         addCacheLog(`✅ 网络请求成功: ${data.length} 条数据`)
         addCacheLog(
-          `📝 响应信息: total=${response.total}, current=${response.current}, size=${response.size}`
+          `📝 响应信息: total=${response.total}, pageNum=${response.current}, pageSize=${response.size}`
         )
       },
       onError: (error) => {
@@ -837,7 +833,7 @@
         console.log('🎯 缓存命中:', data.length, '条')
         console.log('🔑 缓存来源:', response)
         addCacheLog(
-          `🎯 缓存命中: ${data.length} 条数据 (current=${response.current}, size=${response.size})`
+          `🎯 缓存命中: ${data.length} 条数据 (pageNum=${response.current}, pageSize=${response.size})`
         )
         ElMessage.info('数据来自缓存')
       },
@@ -1115,7 +1111,7 @@
       const page = testPages[index]
       addCacheLog(`📄 测试切换到第 ${page} 页`)
       // 更新请求参数
-      requestParams.value = { ...requestParams.value, current: page }
+      requestParams.value = { ...requestParams.value, pageNum: page }
 
       // 切换到测试页面
       handleCurrentChange(page)
@@ -1161,7 +1157,7 @@
   const getCacheKeySummary = (key: string): string => {
     try {
       const params = JSON.parse(key)
-      return `页码: ${params.current || 1}, 大小: ${params.size || 20}${params.name ? ', 名称: ' + params.name : ''}${params.status ? ', 状态: ' + params.status : ''}`
+      return `页码: ${params.pageNum || 1}, 大小: ${params.pageSize || 20}${params.name ? ', 名称: ' + params.name : ''}${params.status ? ', 状态: ' + params.status : ''}`
     } catch {
       return '无效的缓存键'
     }
@@ -1189,8 +1185,8 @@
     ([current, size, search]) => {
       requestParams.value = {
         ...(search as any),
-        current,
-        size
+        pageNum: current,
+        pageSize: size
       }
     },
     { deep: true, immediate: true }

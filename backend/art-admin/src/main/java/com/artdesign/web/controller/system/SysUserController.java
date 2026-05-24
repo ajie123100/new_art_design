@@ -6,6 +6,9 @@ import com.artdesign.common.annotation.Log;
 import com.artdesign.common.core.domain.R;
 import com.artdesign.common.core.page.PageResult;
 import com.artdesign.common.enums.BusinessType;
+import com.artdesign.common.utils.ExcelUtil;
+import com.artdesign.system.domain.dto.ImportResult;
+import com.artdesign.system.domain.dto.UserExcel;
 import com.artdesign.system.domain.dto.UserResetPasswordRequest;
 import com.artdesign.system.domain.dto.UserSaveRequest;
 import com.artdesign.system.domain.dto.UserInfo;
@@ -13,7 +16,10 @@ import com.artdesign.system.domain.dto.UserListItem;
 import com.artdesign.system.domain.dto.UserStatusRequest;
 import com.artdesign.system.service.SysAuthService;
 import com.artdesign.system.service.SysUserService;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +27,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -54,6 +61,20 @@ public class SysUserController {
     @SaCheckPermission("system:user:list")
     public R<UserListItem> get(@PathVariable Long id) {
         return R.ok(userService.getUser(id));
+    }
+
+    @GetMapping("/export")
+    @SaCheckPermission("system:user:export")
+    @Log(title = "用户管理", businessType = BusinessType.EXPORT)
+    public void export(@RequestParam Map<String, String> params, HttpServletResponse response) throws IOException {
+        ExcelUtil.writeExcel(response, userService.exportUsers(params), UserExcel.class, "user");
+    }
+
+    @PostMapping("/import")
+    @SaCheckPermission("system:user:import")
+    @Log(title = "用户管理", businessType = BusinessType.IMPORT)
+    public R<ImportResult> importUsers(@RequestPart("file") Part file) throws IOException {
+        return R.ok(userService.importUsers(ExcelUtil.readExcel(file, UserExcel.class)));
     }
 
     @PostMapping

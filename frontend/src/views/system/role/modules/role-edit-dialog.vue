@@ -2,7 +2,7 @@
   <ElDialog
     v-model="visible"
     :title="dialogType === 'add' ? '新增角色' : '编辑角色'"
-    width="420px"
+    width="560px"
     align-center
     @close="handleClose"
   >
@@ -19,6 +19,27 @@
       <ElFormItem label="启用">
         <ElSwitch v-model="form.enabled" />
       </ElFormItem>
+      <ElFormItem label="数据范围" prop="dataScope">
+        <ElSelect v-model="form.dataScope">
+          <ElOption label="全部数据权限" value="1" />
+          <ElOption label="自定数据权限" value="2" />
+          <ElOption label="本部门数据权限" value="3" />
+          <ElOption label="本部门及以下" value="4" />
+          <ElOption label="仅本人数据权限" value="5" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem v-if="form.dataScope === '2'" label="部门权限" prop="deptIds">
+        <ElScrollbar class="dept-tree-wrap" height="220px" v-loading="deptLoading">
+          <ElTree
+            ref="deptTreeRef"
+            :data="deptTree"
+            show-checkbox
+            node-key="deptId"
+            default-expand-all
+            :props="deptTreeProps"
+          />
+        </ElScrollbar>
+      </ElFormItem>
     </ElForm>
     <template #footer>
       <ElButton @click="handleClose">取消</ElButton>
@@ -28,7 +49,12 @@
 </template>
 
 <script setup lang="ts">
-  import { fetchCreateRole, fetchUpdateRole } from '@/api/system-manage'
+  import {
+    fetchCreateRole,
+    fetchGetDeptList,
+    fetchGetRoleDeptIds,
+    fetchUpdateRole
+  } from '@/api/system-manage'
   import type { FormInstance, FormRules } from 'element-plus'
 
   type RoleListItem = Api.SystemManage.RoleListItem
@@ -52,7 +78,10 @@
 
   const emit = defineEmits<Emits>()
   const formRef = ref<FormInstance>()
+  const deptTreeRef = ref()
   const submitting = ref(false)
+  const deptLoading = ref(false)
+  const deptTree = ref<Api.SystemManage.DeptTreeItem[]>([])
 
   const visible = computed({
     get: () => props.modelValue,
@@ -76,48 +105,95 @@
     roleName: '',
     roleCode: '',
     description: '',
+    dataScope: '1',
+    deptIds: [],
     enabled: true
   })
 
+  const deptTreeProps = {
+    children: 'children',
+    label: 'deptName'
+  }
+
   watch(
     () => props.modelValue,
-    (newVal) => {
-      if (newVal) initForm()
+    async (newVal) => {
+      if (newVal) {
+        await initForm()
+      }
     }
   )
 
   watch(
     () => props.roleData,
-    () => {
-      if (props.modelValue) initForm()
+    async () => {
+      if (props.modelValue) {
+        await initForm()
+      }
     },
     { deep: true }
   )
 
-  const initForm = () => {
+  watch(
+    () => form.dataScope,
+    async (value) => {
+      if (visible.value && value === '2') {
+        await loadDeptTree()
+      }
+    }
+  )
+
+  const initForm = async () => {
     if (props.dialogType === 'edit' && props.roleData) {
       Object.assign(form, {
         roleId: props.roleData.roleId,
         roleName: props.roleData.roleName,
         roleCode: props.roleData.roleCode,
         description: props.roleData.description,
+        dataScope: props.roleData.dataScope || '1',
+        deptIds: [],
         enabled: props.roleData.enabled
       })
+      if (form.dataScope === '2') {
+        await loadDeptTree()
+        await loadRoleDeptIds(props.roleData.roleId)
+      }
     } else {
       Object.assign(form, {
         roleId: undefined,
         roleName: '',
         roleCode: '',
         description: '',
+        dataScope: '1',
+        deptIds: [],
         enabled: true
       })
     }
     nextTick(() => formRef.value?.clearValidate())
   }
 
+  const loadDeptTree = async () => {
+    if (deptTree.value.length) return
+
+    deptLoading.value = true
+    try {
+      deptTree.value = await fetchGetDeptList()
+    } finally {
+      deptLoading.value = false
+    }
+  }
+
+  const loadRoleDeptIds = async (roleId: number) => {
+    const deptIds = await fetchGetRoleDeptIds(roleId)
+    form.deptIds = deptIds
+    await nextTick()
+    deptTreeRef.value?.setCheckedKeys(deptIds)
+  }
+
   const handleClose = () => {
     visible.value = false
     formRef.value?.resetFields()
+    deptTreeRef.value?.setCheckedKeys([])
   }
 
   const handleSubmit = async () => {
@@ -126,6 +202,17 @@
     submitting.value = true
     try {
       await formRef.value.validate()
+      if (form.dataScope === '2') {
+        const checkedKeys = (deptTreeRef.value?.getCheckedKeys() || []) as number[]
+        const halfCheckedKeys = (deptTreeRef.value?.getHalfCheckedKeys() || []) as number[]
+        form.deptIds = [...new Set([...checkedKeys, ...halfCheckedKeys])]
+        if (!form.deptIds.length) {
+          ElMessage.warning('请选择部门权限')
+          return
+        }
+      } else {
+        form.deptIds = []
+      }
       if (props.dialogType === 'add') {
         await fetchCreateRole(form)
       } else {
@@ -139,3 +226,12 @@
     }
   }
 </script>
+
+<style scoped>
+  .dept-tree-wrap {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+  }
+</style>

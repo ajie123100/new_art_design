@@ -25,6 +25,31 @@ export function fetchLogin(params: Api.Auth.LoginParams) {
 }
 
 /**
+ * 刷新访问令牌
+ * @param params 刷新令牌参数
+ * @returns 新令牌响应
+ */
+export function fetchRefreshToken(params: Api.Auth.RefreshTokenParams) {
+  return request.post<Api.Auth.LoginResponse>({
+    url: '/api/auth/refresh',
+    params,
+    showErrorMessage: false
+  })
+}
+
+/**
+ * 退出登录
+ * @param params 刷新令牌参数
+ */
+export function fetchLogout(params?: Partial<Api.Auth.RefreshTokenParams>) {
+  return request.post<void>({
+    url: '/api/auth/logout',
+    params,
+    showErrorMessage: false
+  })
+}
+
+/**
  * 获取用户信息
  * @returns 用户信息
  */

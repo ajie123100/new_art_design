@@ -1,13 +1,17 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
 import com.artdesign.system.domain.dto.NoticeListItem;
 import com.artdesign.system.domain.dto.NoticeSaveRequest;
 import com.artdesign.system.domain.entity.SysNotice;
 import com.artdesign.system.mapper.SysNoticeMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,25 +29,27 @@ public class SysNoticeService {
     }
 
     public PageResult<NoticeListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
 
-        List<SysNotice> notices = noticeMapper.selectList(new LambdaQueryWrapper<SysNotice>()
+        Page<SysNotice> page = new Page<>(current, size);
+        IPage<SysNotice> result = noticeMapper.selectPage(page, new LambdaQueryWrapper<SysNotice>()
                 .like(hasText(params.get("noticeTitle")), SysNotice::getNoticeTitle, params.get("noticeTitle"))
                 .eq(hasText(params.get("noticeType")), SysNotice::getNoticeType, params.get("noticeType"))
                 .eq(hasText(params.get("status")), SysNotice::getStatus, params.get("status"))
                 .orderByDesc(SysNotice::getNoticeId));
 
-        List<NoticeListItem> records = notices.stream()
+        List<NoticeListItem> records = result.getRecords().stream()
                 .map(this::toListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public SysNotice get(Long noticeId) {
         return findNotice(noticeId);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Long create(NoticeSaveRequest request) {
         SysNotice notice = new SysNotice();
         fillNotice(notice, request);
@@ -54,6 +60,7 @@ public class SysNoticeService {
         return notice.getNoticeId();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void update(NoticeSaveRequest request) {
         if (request.noticeId() == null) {
             throw new BusinessException("公告ID不能为空");
@@ -66,6 +73,7 @@ public class SysNoticeService {
         noticeMapper.updateById(notice);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> noticeIds) {
         if (noticeIds == null || noticeIds.isEmpty()) {
             throw new BusinessException("请选择要删除的公告");
@@ -99,12 +107,6 @@ public class SysNoticeService {
         notice.setNoticeType(request.noticeType());
         notice.setNoticeContent(defaultIfBlank(request.noticeContent(), ""));
         notice.setRemark(defaultIfBlank(request.remark(), ""));
-    }
-
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
     }
 
     private String formatDateTime(LocalDateTime dateTime) {

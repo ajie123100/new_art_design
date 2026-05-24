@@ -5,6 +5,7 @@ public record RoleListItem(
         String roleName,
         String roleCode,
         String description,
+        String dataScope,
         boolean enabled,
         String createTime
 ) {

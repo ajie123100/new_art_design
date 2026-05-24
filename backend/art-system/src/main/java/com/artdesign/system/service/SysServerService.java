@@ -1,11 +1,13 @@
 package com.artdesign.system.service;
 
 import com.artdesign.system.domain.dto.ServerInfo;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
+import com.sun.management.OperatingSystemMXBean;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -13,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+@Service
 public class SysServerService {
 
     private static final DecimalFormat DF = new DecimalFormat("0.00");
@@ -29,13 +32,28 @@ public class SysServerService {
 
     private ServerInfo.Cpu getCpu() {
         int count = Runtime.getRuntime().availableProcessors();
-        return new ServerInfo.Cpu(0, count);
+        double load = 0;
+        java.lang.management.OperatingSystemMXBean bean = ManagementFactory.getOperatingSystemMXBean();
+        if (bean instanceof OperatingSystemMXBean osBean) {
+            double cpuLoad = osBean.getCpuLoad();
+            load = cpuLoad < 0 ? 0 : cpuLoad * 100;
+        } else if (bean.getSystemLoadAverage() >= 0 && count > 0) {
+            load = bean.getSystemLoadAverage() / count * 100;
+        }
+        return new ServerInfo.Cpu(Double.parseDouble(DF.format(load)), count);
     }
 
     private ServerInfo.Memory getJvmMemory() {
-        MemoryMXBean mem = ManagementFactory.getMemoryMXBean();
-        MemoryUsage usage = mem.getHeapMemoryUsage();
-        long total = usage.getCommitted() / 1024 / 1024;
+        java.lang.management.OperatingSystemMXBean bean = ManagementFactory.getOperatingSystemMXBean();
+        if (bean instanceof OperatingSystemMXBean osBean) {
+            long total = osBean.getTotalMemorySize() / 1024 / 1024;
+            long free = osBean.getFreeMemorySize() / 1024 / 1024;
+            long used = total - free;
+            double percent = total > 0 ? used * 100.0 / total : 0;
+            return new ServerInfo.Memory(total, used, free, Double.parseDouble(DF.format(percent)));
+        }
+        MemoryUsage usage = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+        long total = Runtime.getRuntime().maxMemory() / 1024 / 1024;
         long used = usage.getUsed() / 1024 / 1024;
         long free = total - used;
         double percent = total > 0 ? used * 100.0 / total : 0;

@@ -4,8 +4,8 @@ import java.util.List;
 
 public class PageResult<T> {
     private List<T> records;
-    private long current;
-    private long size;
+    private long pageNum;
+    private long pageSize;
     private long total;
     private int code;
     private String msg;
@@ -13,17 +13,17 @@ public class PageResult<T> {
     public PageResult() {
     }
 
-    public PageResult(List<T> records, long current, long size, long total) {
+    public PageResult(List<T> records, long pageNum, long pageSize, long total) {
         this.records = records;
-        this.current = current;
-        this.size = size;
+        this.pageNum = pageNum;
+        this.pageSize = pageSize;
         this.total = total;
         this.code = 200;
         this.msg = "success";
     }
 
-    public static <T> PageResult<T> of(List<T> records, long current, long size, long total) {
-        return new PageResult<>(records, current, size, total);
+    public static <T> PageResult<T> of(List<T> records, long pageNum, long pageSize, long total) {
+        return new PageResult<>(records, pageNum, pageSize, total);
     }
 
     public List<T> getRecords() {
@@ -34,20 +34,20 @@ public class PageResult<T> {
         this.records = records;
     }
 
-    public long getCurrent() {
-        return current;
+    public long getPageNum() {
+        return pageNum;
     }
 
-    public void setCurrent(long current) {
-        this.current = current;
+    public void setPageNum(long pageNum) {
+        this.pageNum = pageNum;
     }
 
-    public long getSize() {
-        return size;
+    public long getPageSize() {
+        return pageSize;
     }
 
-    public void setSize(long size) {
-        this.size = size;
+    public void setPageSize(long pageSize) {
+        this.pageSize = pageSize;
     }
 
     public long getTotal() {

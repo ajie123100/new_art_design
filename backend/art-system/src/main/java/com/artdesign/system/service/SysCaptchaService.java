@@ -28,14 +28,16 @@ public class SysCaptchaService {
     private final SecureRandom random = new SecureRandom();
     private final CaptchaConfig captchaConfig;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final SysConfigService configService;
 
-    public SysCaptchaService(CaptchaConfig captchaConfig, RedisTemplate<String, Object> redisTemplate) {
+    public SysCaptchaService(CaptchaConfig captchaConfig, RedisTemplate<String, Object> redisTemplate, SysConfigService configService) {
         this.captchaConfig = captchaConfig;
         this.redisTemplate = redisTemplate;
+        this.configService = configService;
     }
 
     public CaptchaResponse createCaptcha() {
-        if (!captchaConfig.isEnabled()) {
+        if (!isCaptchaEnabled()) {
             return new CaptchaResponse(false, null, null);
         }
 
@@ -59,7 +61,7 @@ public class SysCaptchaService {
     }
 
     public void validate(String uuid, String code) {
-        if (!captchaConfig.isEnabled()) {
+        if (!isCaptchaEnabled()) {
             return;
         }
 
@@ -160,6 +162,14 @@ public class SysCaptchaService {
 
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private boolean isCaptchaEnabled() {
+        String configValue = configService.getConfigKey("sys.account.captcha");
+        if (hasText(configValue)) {
+            return Boolean.parseBoolean(configValue);
+        }
+        return captchaConfig.isEnabled();
     }
 
     private record MathExpression(String display, int result) {

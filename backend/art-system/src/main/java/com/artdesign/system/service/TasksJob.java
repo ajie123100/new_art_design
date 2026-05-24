@@ -1,6 +1,7 @@
 package com.artdesign.system.service;
 
 import com.artdesign.system.domain.entity.SysJobLog;
+import com.artdesign.system.mapper.SysJobLogMapper;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -13,6 +14,7 @@ public class TasksJob implements Job {
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
+        long start = System.currentTimeMillis();
         String invokeTarget = context.getMergedJobDataMap().getString("invokeTarget");
         Long jobId = context.getMergedJobDataMap().getLongValue("jobId");
         SysJobLog log = new SysJobLog();
@@ -22,12 +24,15 @@ public class TasksJob implements Job {
         log.setCreateTime(LocalDateTime.now());
         try {
             new InvokeTarget(invokeTarget).invoke();
-            log.setStatus("1");
+            log.setStatus("0");
             log.setJobMessage("success");
         } catch (Exception e) {
-            log.setStatus("0");
+            log.setStatus("1");
             log.setExceptionInfo(e.getMessage());
             log.setJobMessage(e.getMessage());
+        } finally {
+            log.setElapsedMs(System.currentTimeMillis() - start);
+            SpringContextUtils.getBean(SysJobLogMapper.class).insert(log);
         }
     }
 
@@ -39,12 +44,12 @@ public class TasksJob implements Job {
         }
 
         public void invoke() throws Exception {
-            String[] parts = invokeTarget.split("\\.");
-            if (parts.length < 3) {
+            int dotIndex = invokeTarget.lastIndexOf('.');
+            if (dotIndex <= 0 || dotIndex == invokeTarget.length() - 1) {
                 throw new IllegalArgumentException("Invalid invoke target: " + invokeTarget);
             }
-            String className = parts[0] + "." + parts[1] + "." + parts[2];
-            String methodName = parts.length > 3 ? parts[3] : "execute";
+            String className = invokeTarget.substring(0, dotIndex);
+            String methodName = invokeTarget.substring(dotIndex + 1);
             Class<?> clazz = Class.forName(className);
             Object bean = SpringContextUtils.getBean(clazz);
             Method method = clazz.getMethod(methodName);

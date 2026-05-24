@@ -4,11 +4,17 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.artdesign.common.annotation.Log;
 import com.artdesign.common.core.domain.R;
 import com.artdesign.common.enums.BusinessType;
+import com.artdesign.common.utils.ExcelUtil;
+import com.artdesign.system.domain.dto.ImportResult;
+import com.artdesign.system.domain.dto.MenuExcel;
 import com.artdesign.system.domain.dto.MenuSaveRequest;
 import com.artdesign.system.domain.dto.MenuStatusRequest;
 import com.artdesign.system.domain.dto.MenuTreeItem;
 import com.artdesign.system.service.SysMenuService;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,6 +49,20 @@ public class SysMenuManageController {
     @SaCheckPermission("system:menu:list")
     public R<MenuTreeItem> get(@PathVariable Long id) {
         return R.ok(menuService.getSystemMenu(id));
+    }
+
+    @GetMapping("/export")
+    @SaCheckPermission("system:menu:export")
+    @Log(title = "菜单管理", businessType = BusinessType.EXPORT)
+    public void export(@RequestParam Map<String, String> params, HttpServletResponse response) throws IOException {
+        ExcelUtil.writeExcel(response, menuService.exportMenus(params), MenuExcel.class, "menu");
+    }
+
+    @PostMapping("/import")
+    @SaCheckPermission("system:menu:import")
+    @Log(title = "菜单管理", businessType = BusinessType.IMPORT)
+    public R<ImportResult> importMenus(@RequestPart("file") Part file) throws IOException {
+        return R.ok(menuService.importMenus(ExcelUtil.readExcel(file, MenuExcel.class)));
     }
 
     @PostMapping

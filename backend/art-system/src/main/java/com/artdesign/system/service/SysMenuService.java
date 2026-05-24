@@ -2,6 +2,8 @@ package com.artdesign.system.service;
 
 import com.artdesign.common.exception.BusinessException;
 import com.artdesign.system.domain.dto.AppRouteRecord;
+import com.artdesign.system.domain.dto.ImportResult;
+import com.artdesign.system.domain.dto.MenuExcel;
 import com.artdesign.system.domain.dto.MenuSaveRequest;
 import com.artdesign.system.domain.dto.MenuStatusRequest;
 import com.artdesign.system.domain.dto.MenuTreeItem;
@@ -53,6 +55,55 @@ public class SysMenuService {
         return toMenuTreeItem(findMenu(menuId));
     }
 
+    public List<MenuExcel> exportMenus(Map<String, String> params) {
+        return flattenMenuTree(listSystemMenus(params)).stream()
+                .map(this::toMenuExcel)
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importMenus(List<MenuExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入菜单不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (MenuExcel row : rows) {
+            if (row == null || !hasText(row.menuName)) {
+                skipped++;
+                continue;
+            }
+            SysMenu existing = findImportMenu(row);
+            MenuSaveRequest request = new MenuSaveRequest(
+                    existing == null ? row.menuId : existing.getMenuId(),
+                    row.parentId,
+                    row.menuName,
+                    row.orderNum == null ? 1 : row.orderNum,
+                    row.path,
+                    row.component,
+                    row.routeName,
+                    parseBoolean(row.external, false),
+                    parseBoolean(row.keepAlive, true),
+                    defaultIfBlank(row.menuType, "C"),
+                    parseBoolean(row.visible, true),
+                    parseBoolean(row.enabled, true),
+                    row.perms,
+                    row.icon,
+                    row.remark
+            );
+            if (existing == null) {
+                createMenu(request);
+            } else {
+                updateMenu(request);
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入菜单没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public Long createMenu(MenuSaveRequest request) {
         ensureValidParent(request.parentId(), null);
@@ -94,6 +145,7 @@ public class SysMenuService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateMenuStatus(MenuStatusRequest request) {
         SysMenu menu = findMenu(request.menuId());
         menu.setStatus(booleanToStatus(request.enabled()));
@@ -160,6 +212,39 @@ public class SysMenuService {
         item.setCreateTime(formatDateTime(menu.getCreateTime()));
         item.setUpdateTime(formatDateTime(menu.getUpdateTime()));
         return item;
+    }
+
+    private MenuExcel toMenuExcel(MenuTreeItem item) {
+        MenuExcel excel = new MenuExcel();
+        excel.menuId = item.getMenuId();
+        excel.parentId = item.getParentId();
+        excel.menuName = item.getMenuName();
+        excel.orderNum = item.getOrderNum();
+        excel.path = item.getPath();
+        excel.component = item.getComponent();
+        excel.routeName = item.getRouteName();
+        excel.external = Boolean.TRUE.equals(item.getExternal()) ? "是" : "否";
+        excel.keepAlive = Boolean.TRUE.equals(item.getKeepAlive()) ? "是" : "否";
+        excel.menuType = item.getMenuType();
+        excel.visible = Boolean.TRUE.equals(item.getVisible()) ? "是" : "否";
+        excel.enabled = Boolean.TRUE.equals(item.getEnabled()) ? "是" : "否";
+        excel.perms = item.getPerms();
+        excel.icon = item.getIcon();
+        excel.remark = item.getRemark();
+        return excel;
+    }
+
+    private SysMenu findImportMenu(MenuExcel row) {
+        if (row.menuId != null) {
+            SysMenu menu = menuMapper.selectById(row.menuId);
+            if (menu != null) {
+                return menu;
+            }
+        }
+        return menuMapper.selectOne(new LambdaQueryWrapper<SysMenu>()
+                .eq(SysMenu::getParentId, row.parentId == null ? 0L : row.parentId)
+                .eq(SysMenu::getMenuName, row.menuName)
+                .last("LIMIT 1"));
     }
 
     private void fillMenu(SysMenu menu, MenuSaveRequest request) {
@@ -233,6 +318,17 @@ public class SysMenuService {
             }
         }
         return results;
+    }
+
+    private List<MenuTreeItem> flattenMenuTree(List<MenuTreeItem> items) {
+        List<MenuTreeItem> result = new ArrayList<>();
+        for (MenuTreeItem item : items) {
+            result.add(item);
+            if (item.getChildren() != null && !item.getChildren().isEmpty()) {
+                result.addAll(flattenMenuTree(item.getChildren()));
+            }
+        }
+        return result;
     }
 
     private boolean menuMatches(MenuTreeItem item, String menuName, String path, String perms, String menuType, String enabled) {
@@ -319,6 +415,18 @@ public class SysMenuService {
             return "F";
         }
         return "C";
+    }
+
+    private Boolean parseBoolean(String value, boolean fallback) {
+        if (!hasText(value)) {
+            return fallback;
+        }
+        return Objects.equals(value, "1")
+                || Objects.equals(value, "是")
+                || Objects.equals(value, "启用")
+                || Objects.equals(value, "显示")
+                || Objects.equals(value, "true")
+                || Objects.equals(value, "TRUE");
     }
 
     private String deriveRouteName(String path, String menuName) {

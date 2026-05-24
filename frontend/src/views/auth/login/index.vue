@@ -128,7 +128,7 @@
   import { useI18n } from 'vue-i18n'
   import { HttpError } from '@/utils/http/error'
   import { fetchLogin, fetchGetCaptcha } from '@/api/auth'
-  import { ElNotification, type FormInstance, type FormRules } from 'element-plus'
+  import { ElMessage, ElNotification, type FormInstance, type FormRules } from 'element-plus'
   import { useSettingStore } from '@/store/modules/setting'
 
   defineOptions({ name: 'Login' })
@@ -193,8 +193,8 @@
   const getCaptcha = async () => {
     const res = await fetchGetCaptcha()
     captchaEnabled.value = res.captchaEnabled
-    captchaUuid.value = res.uuid
-    captchaImg.value = res.img
+    captchaUuid.value = res.uuid || ''
+    captchaImg.value = res.img || ''
   }
 
   const systemName = AppConfig.systemInfo.name
@@ -276,12 +276,8 @@
       router.push(redirect || '/')
     } catch (error) {
       // 处理 HttpError
-      if (error instanceof HttpError) {
-        // console.log(error.code)
-      } else {
-        // 处理非 HttpError
-        // ElMessage.error('登录失败，请稍后重试')
-        console.error('[Login] Unexpected error:', error)
+      if (!(error instanceof HttpError)) {
+        ElMessage.error('登录失败，请稍后重试')
       }
     } finally {
       loading.value = false

@@ -29,17 +29,21 @@ public class SysDeptService {
 
     private final SysDeptMapper deptMapper;
     private final SysUserMapper userMapper;
+    private final DataScopeService dataScopeService;
 
-    public SysDeptService(SysDeptMapper deptMapper, SysUserMapper userMapper) {
+    public SysDeptService(SysDeptMapper deptMapper, SysUserMapper userMapper, DataScopeService dataScopeService) {
         this.deptMapper = deptMapper;
         this.userMapper = userMapper;
+        this.dataScopeService = dataScopeService;
     }
 
     public List<DeptTreeItem> listDepartments(Map<String, String> params) {
+        DataScopeService.DataScope dataScope = dataScopeService.currentDataScope();
         List<SysDept> departments = deptMapper.selectList(new LambdaQueryWrapper<SysDept>()
                 .like(hasText(params.get("deptName")), SysDept::getDeptName, params.get("deptName"))
                 .like(hasText(params.get("leader")), SysDept::getLeader, params.get("leader"))
                 .eq(hasText(params.get("enabled")), SysDept::getStatus, booleanToStatus(params.get("enabled")))
+                .in(dataScope.hasDeptLimit(), SysDept::getDeptId, dataScope.deptIds())
                 .eq(SysDept::getDelFlag, "0")
                 .orderByAsc(SysDept::getParentId)
                 .orderByAsc(SysDept::getOrderNum)
@@ -121,6 +125,7 @@ public class SysDeptService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateStatus(DeptStatusRequest request) {
         SysDept dept = findDepartment(request.deptId());
         dept.setStatus(booleanToStatus(request.enabled()));

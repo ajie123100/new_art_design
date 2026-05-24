@@ -5,14 +5,21 @@ import com.artdesign.common.annotation.Log;
 import com.artdesign.common.core.domain.R;
 import com.artdesign.common.core.page.PageResult;
 import com.artdesign.common.enums.BusinessType;
+import com.artdesign.common.utils.ExcelUtil;
+import com.artdesign.system.domain.dto.DictDataExcel;
 import com.artdesign.system.domain.dto.DictDataListItem;
 import com.artdesign.system.domain.dto.DictDataSaveRequest;
 import com.artdesign.system.domain.dto.DictDataStatusRequest;
+import com.artdesign.system.domain.dto.DictTypeExcel;
 import com.artdesign.system.domain.dto.DictTypeListItem;
 import com.artdesign.system.domain.dto.DictTypeSaveRequest;
 import com.artdesign.system.domain.dto.DictTypeStatusRequest;
+import com.artdesign.system.domain.dto.ImportResult;
 import com.artdesign.system.service.SysDictService;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +27,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,6 +54,20 @@ public class SysDictController {
     @SaCheckPermission("system:dict:list")
     public R<DictTypeListItem> getType(@PathVariable Long id) {
         return R.ok(dictService.getDictType(id));
+    }
+
+    @GetMapping("/type/export")
+    @SaCheckPermission("system:dict:export")
+    @Log(title = "字典类型", businessType = BusinessType.EXPORT)
+    public void exportTypes(@RequestParam Map<String, String> params, HttpServletResponse response) throws IOException {
+        ExcelUtil.writeExcel(response, dictService.exportDictTypes(params), DictTypeExcel.class, "dict_type");
+    }
+
+    @PostMapping("/type/import")
+    @SaCheckPermission("system:dict:import")
+    @Log(title = "字典类型", businessType = BusinessType.IMPORT)
+    public R<ImportResult> importTypes(@RequestPart("file") Part file) throws IOException {
+        return R.ok(dictService.importDictTypes(ExcelUtil.readExcel(file, DictTypeExcel.class)));
     }
 
     @PostMapping("/type")
@@ -94,6 +116,20 @@ public class SysDictController {
     @SaCheckPermission("system:dict:list")
     public R<DictDataListItem> getData(@PathVariable Long id) {
         return R.ok(dictService.getDictData(id));
+    }
+
+    @GetMapping("/data/export")
+    @SaCheckPermission("system:dict:export")
+    @Log(title = "字典数据", businessType = BusinessType.EXPORT)
+    public void exportData(@RequestParam Map<String, String> params, HttpServletResponse response) throws IOException {
+        ExcelUtil.writeExcel(response, dictService.exportDictData(params), DictDataExcel.class, "dict_data");
+    }
+
+    @PostMapping("/data/import")
+    @SaCheckPermission("system:dict:import")
+    @Log(title = "字典数据", businessType = BusinessType.IMPORT)
+    public R<ImportResult> importData(@RequestPart("file") Part file) throws IOException {
+        return R.ok(dictService.importDictData(ExcelUtil.readExcel(file, DictDataExcel.class)));
     }
 
     @PostMapping("/data")

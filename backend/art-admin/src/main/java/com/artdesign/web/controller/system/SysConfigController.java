@@ -5,10 +5,16 @@ import com.artdesign.common.annotation.Log;
 import com.artdesign.common.core.domain.R;
 import com.artdesign.common.core.page.PageResult;
 import com.artdesign.common.enums.BusinessType;
+import com.artdesign.common.utils.ExcelUtil;
+import com.artdesign.system.domain.dto.ConfigExcel;
 import com.artdesign.system.domain.dto.ConfigListItem;
 import com.artdesign.system.domain.dto.ConfigSaveRequest;
+import com.artdesign.system.domain.dto.ImportResult;
 import com.artdesign.system.service.SysConfigService;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,7 +45,7 @@ public class SysConfigController {
         return R.ok(configService.list(params));
     }
 
-    @GetMapping("/{configKey}")
+    @GetMapping("/key/{configKey}")
     public R<String> getConfigKey(@PathVariable String configKey) {
         return R.ok(configService.getConfigKey(configKey));
     }
@@ -47,6 +54,20 @@ public class SysConfigController {
     @SaCheckPermission("system:config:list")
     public R<ConfigListItem> get(@PathVariable Long id) {
         return R.ok(configService.get(id));
+    }
+
+    @GetMapping("/export")
+    @SaCheckPermission("system:config:export")
+    @Log(title = "参数管理", businessType = BusinessType.EXPORT)
+    public void export(@RequestParam Map<String, String> params, HttpServletResponse response) throws IOException {
+        ExcelUtil.writeExcel(response, configService.exportConfigs(params), ConfigExcel.class, "config");
+    }
+
+    @PostMapping("/import")
+    @SaCheckPermission("system:config:import")
+    @Log(title = "参数管理", businessType = BusinessType.IMPORT)
+    public R<ImportResult> importConfigs(@RequestPart("file") Part file) throws IOException {
+        return R.ok(configService.importConfigs(ExcelUtil.readExcel(file, ConfigExcel.class)));
     }
 
     @PostMapping
@@ -73,6 +94,14 @@ public class SysConfigController {
                 .map(Long::valueOf)
                 .toList();
         configService.delete(configIds);
+        return R.ok();
+    }
+
+    @DeleteMapping("/refreshCache")
+    @SaCheckPermission("system:config:edit")
+    @Log(title = "参数管理", businessType = BusinessType.CLEAN)
+    public R<Void> refreshCache() {
+        configService.refreshConfigCache();
         return R.ok();
     }
 }

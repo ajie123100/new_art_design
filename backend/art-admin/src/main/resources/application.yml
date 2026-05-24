@@ -6,18 +6,18 @@ spring:
     name: art-admin
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/art_design?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-    username: root
-    password: root
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      password:
-      database: 0
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
   sql:
     init:
-      mode: always
+      mode: ${SQL_INIT_MODE:never}
       encoding: UTF-8
       schema-locations: classpath:sql/art_system.sql
   jackson:
@@ -37,8 +37,8 @@ sa-token:
   token-name: Authorization
   timeout: 86400
   active-timeout: -1
-  is-concurrent: true
-  is-share: true
+  is-concurrent: ${SA_TOKEN_IS_CONCURRENT:true}
+  is-share: ${SA_TOKEN_IS_SHARE:false}
   token-style: uuid
   is-log: false
 
@@ -48,7 +48,10 @@ springdoc:
 
 art:
   datasource:
-    note: "使用 phpstudy_pro MySQL 8.0.12，默认库 art_design，账号 root/root。"
+    note: "请通过 DB_URL、DB_USERNAME、DB_PASSWORD 配置数据库；本地开发可启用 dev profile。"
+  auth:
+    access-token-timeout: ${ACCESS_TOKEN_TIMEOUT:1800}
+    refresh-token-timeout: ${REFRESH_TOKEN_TIMEOUT:604800}
 
 captcha:
   enabled: true

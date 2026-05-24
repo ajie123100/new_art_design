@@ -27,15 +27,19 @@ const LOGOUT_DELAY = 500
 const MAX_RETRIES = 0
 const RETRY_DELAY = 1000
 const UNAUTHORIZED_DEBOUNCE_TIME = 3000
+const REFRESH_TOKEN_URL = '/api/auth/refresh'
 
 /** 401防抖状态 */
 let isUnauthorizedErrorShown = false
 let unauthorizedTimer: NodeJS.Timeout | null = null
+let refreshTokenPromise: Promise<string> | null = null
 
 /** 扩展 AxiosRequestConfig */
 interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
   showErrorMessage?: boolean
   showSuccessMessage?: boolean
+  skipAuthRefresh?: boolean
+  _retry?: boolean
 }
 
 const { VITE_API_URL, VITE_WITH_CREDENTIALS } = import.meta.env
@@ -67,7 +71,12 @@ axiosInstance.interceptors.request.use(
     const { accessToken } = useUserStore()
     if (accessToken) request.headers.set('Authorization', accessToken)
 
-    if (request.data && !(request.data instanceof FormData) && !request.headers['Content-Type']) {
+    if (
+      request.data &&
+      typeof request.data !== 'string' &&
+      !(request.data instanceof FormData) &&
+      !request.headers['Content-Type']
+    ) {
       request.headers.set('Content-Type', 'application/json')
       request.data = JSON.stringify(request.data)
     }
@@ -82,14 +91,16 @@ axiosInstance.interceptors.request.use(
 
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
-  (response: AxiosResponse<BaseResponse>) => {
+  async (response: AxiosResponse<BaseResponse>) => {
     const { code, msg } = response.data
     if (code === ApiStatus.success) return response
-    if (code === ApiStatus.unauthorized) handleUnauthorizedError(msg)
+    if (code === ApiStatus.unauthorized) return handleUnauthorizedResponse(response, msg)
     throw createHttpError(msg || $t('httpMsg.requestFailed'), code)
   },
-  (error) => {
-    if (error.response?.status === ApiStatus.unauthorized) handleUnauthorizedError()
+  async (error) => {
+    if (error.response?.status === ApiStatus.unauthorized) {
+      return handleUnauthorizedRequest(error.config, error.response?.data?.msg)
+    }
     return Promise.reject(handleError(error))
   }
 )
@@ -99,8 +110,83 @@ function createHttpError(message: string, code: number) {
   return new HttpError(message, code)
 }
 
-/** 处理401错误（带防抖） */
-function handleUnauthorizedError(message?: string): never {
+/** 处理业务401响应 */
+async function handleUnauthorizedResponse(
+  response: AxiosResponse<BaseResponse>,
+  message?: string
+): Promise<AxiosResponse<BaseResponse>> {
+  return handleUnauthorizedRequest(response.config, message)
+}
+
+/** 处理401并尝试刷新令牌 */
+async function handleUnauthorizedRequest(
+  config?: InternalAxiosRequestConfig | AxiosRequestConfig,
+  message?: string
+): Promise<AxiosResponse<BaseResponse>> {
+  const requestConfig = config as ExtendedAxiosRequestConfig | undefined
+  if (!requestConfig || requestConfig._retry || requestConfig.skipAuthRefresh) {
+    throwUnauthorizedError(message)
+  }
+
+  const userStore = useUserStore()
+  if (!userStore.refreshToken) {
+    throwUnauthorizedError(message)
+  }
+
+  requestConfig._retry = true
+
+  try {
+    const newToken = await refreshAccessToken()
+    setAuthorizationHeader(requestConfig, newToken)
+    return axiosInstance.request<BaseResponse>(requestConfig)
+  } catch {
+    throwUnauthorizedError(message)
+  }
+}
+
+/** 刷新访问令牌，多个401共用同一个刷新请求 */
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshTokenPromise) {
+    const userStore = useUserStore()
+    refreshTokenPromise = axiosInstance
+      .post<BaseResponse<Api.Auth.LoginResponse>>(
+        REFRESH_TOKEN_URL,
+        { refreshToken: userStore.refreshToken },
+        {
+          skipAuthRefresh: true,
+          showErrorMessage: false
+        } as ExtendedAxiosRequestConfig
+      )
+      .then((response) => {
+        const tokenInfo = response.data.data
+        if (!tokenInfo?.token || !tokenInfo.refreshToken) {
+          throw createHttpError($t('httpMsg.unauthorized'), ApiStatus.unauthorized)
+        }
+        userStore.setToken(tokenInfo.token, tokenInfo.refreshToken)
+        return tokenInfo.token
+      })
+      .finally(() => {
+        refreshTokenPromise = null
+      })
+  }
+
+  return refreshTokenPromise
+}
+
+/** 设置请求头中的访问令牌 */
+function setAuthorizationHeader(config: ExtendedAxiosRequestConfig, token: string) {
+  if (!config.headers) {
+    config.headers = {}
+  }
+  if (typeof (config.headers as any).set === 'function') {
+    ;(config.headers as any).set('Authorization', token)
+  } else {
+    ;(config.headers as Record<string, string>).Authorization = token
+  }
+}
+
+/** 处理无法恢复的401错误（带防抖） */
+function throwUnauthorizedError(message?: string): never {
   const error = createHttpError(message || $t('httpMsg.unauthorized'), ApiStatus.unauthorized)
 
   if (!isUnauthorizedErrorShown) {

@@ -10,6 +10,7 @@ public class FileConfig {
     private String path = "uploads";
     private long maxSize = 10 * 1024 * 1024;
     private String allowTypes = "jpg,jpeg,png,gif,bmp,webp,pdf,doc,docx,xls,xlsx,txt,zip,rar";
+    private String allowContentTypes = "image/,application/pdf,text/plain,application/msword,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/x-zip-compressed,application/vnd.rar,application/x-rar-compressed";
 
     public String getPath() {
         return path;
@@ -33,5 +34,13 @@ public class FileConfig {
 
     public void setAllowTypes(String allowTypes) {
         this.allowTypes = allowTypes;
+    }
+
+    public String getAllowContentTypes() {
+        return allowContentTypes;
+    }
+
+    public void setAllowContentTypes(String allowContentTypes) {
+        this.allowContentTypes = allowContentTypes;
     }
 }

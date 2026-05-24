@@ -92,7 +92,7 @@
   import { computed, ref } from 'vue'
   import { useUserStore } from '@/store/modules/user'
   import { useI18n } from 'vue-i18n'
-  import { fetchLogin, fetchGetUserInfo } from '@/api/auth'
+  import { fetchLogin, fetchGetCaptcha, fetchGetUserInfo } from '@/api/auth'
 
   defineOptions({ name: 'PermissionSwitchRole' })
 
@@ -178,6 +178,12 @@
       switching.value = true
 
       // 模拟登录请求
+      const captcha = await fetchGetCaptcha()
+      if (captcha.captchaEnabled) {
+        ElMessage.warning('当前后端启用了验证码，请退出后在登录页切换账号')
+        return
+      }
+
       const { token, refreshToken } = await fetchLogin({
         userName: account.userName,
         password: account.password
@@ -200,7 +206,6 @@
     } catch (error) {
       if (error !== 'cancel') {
         ElMessage.error('切换用户身份失败，请稍后重试')
-        console.error('[SwitchRole] Error:', error)
       }
     } finally {
       switching.value = false

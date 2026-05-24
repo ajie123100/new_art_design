@@ -1,7 +1,10 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
+import com.artdesign.system.domain.dto.ImportResult;
+import com.artdesign.system.domain.dto.UserExcel;
 import com.artdesign.system.domain.dto.UserListItem;
 import com.artdesign.system.domain.dto.UserResetPasswordRequest;
 import com.artdesign.system.domain.dto.UserSaveRequest;
@@ -9,6 +12,8 @@ import com.artdesign.system.domain.dto.UserStatusRequest;
 import com.artdesign.system.domain.entity.SysUser;
 import com.artdesign.system.mapper.SysUserMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,40 +23,103 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 @Service
 public class SysUserService {
     private static final String DEFAULT_AVATAR = "https://cube.elemecdn.com/e/fd/0fc7d20532fdaf769a25683617711png.png";
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Pattern ROLE_SPLITTER = Pattern.compile("[,，\\s]+");
 
     private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final DataScopeService dataScopeService;
+    private final SysLoginSecurityService loginSecurityService;
 
-    public SysUserService(SysUserMapper userMapper, PasswordEncoder passwordEncoder) {
+    public SysUserService(SysUserMapper userMapper, PasswordEncoder passwordEncoder, DataScopeService dataScopeService, SysLoginSecurityService loginSecurityService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.dataScopeService = dataScopeService;
+        this.loginSecurityService = loginSecurityService;
     }
 
     public PageResult<UserListItem> listUsers(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
+        long pageNum = PageUtils.pageNum(params);
+        long pageSize = PageUtils.pageSize(params);
+        DataScopeService.DataScope dataScope = dataScopeService.currentDataScope();
 
-        List<SysUser> users = userMapper.selectList(new LambdaQueryWrapper<SysUser>()
+        Page<SysUser> page = new Page<>(pageNum, pageSize);
+        IPage<SysUser> result = userMapper.selectPage(page, new LambdaQueryWrapper<SysUser>()
                 .like(hasText(params.get("userName")), SysUser::getUserName, params.get("userName"))
                 .like(hasText(params.get("userEmail")), SysUser::getEmail, params.get("userEmail"))
                 .like(hasText(params.get("userPhone")), SysUser::getPhonenumber, params.get("userPhone"))
                 .eq(hasText(params.get("status")), SysUser::getStatus, params.get("status"))
+                .in(dataScope.hasDeptLimit(), SysUser::getDeptId, dataScope.deptIds())
+                .eq(dataScope.selfOnly(), SysUser::getUserId, dataScope.userId())
                 .eq(SysUser::getDelFlag, "0")
                 .orderByAsc(SysUser::getUserId));
 
-        List<UserListItem> records = users.stream()
+        List<UserListItem> records = result.getRecords().stream()
                 .map(this::toUserListItem)
                 .toList();
-        return page(records, current, size);
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public UserListItem getUser(Long userId) {
         return toUserListItem(findUser(userId));
+    }
+
+    public List<UserExcel> exportUsers(Map<String, String> params) {
+        DataScopeService.DataScope dataScope = dataScopeService.currentDataScope();
+        return userMapper.selectList(new LambdaQueryWrapper<SysUser>()
+                        .like(hasText(params.get("userName")), SysUser::getUserName, params.get("userName"))
+                        .like(hasText(params.get("userEmail")), SysUser::getEmail, params.get("userEmail"))
+                        .like(hasText(params.get("userPhone")), SysUser::getPhonenumber, params.get("userPhone"))
+                        .eq(hasText(params.get("status")), SysUser::getStatus, params.get("status"))
+                        .in(dataScope.hasDeptLimit(), SysUser::getDeptId, dataScope.deptIds())
+                        .eq(dataScope.selfOnly(), SysUser::getUserId, dataScope.userId())
+                        .eq(SysUser::getDelFlag, "0")
+                        .orderByAsc(SysUser::getUserId))
+                .stream()
+                .map(this::toUserExcel)
+                .toList();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importUsers(List<UserExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new BusinessException("导入用户不能为空");
+        }
+        int count = 0;
+        int skipped = 0;
+        for (UserExcel row : rows) {
+            if (row == null || !hasText(row.userName)) {
+                skipped++;
+                continue;
+            }
+            SysUser existing = findImportUser(row);
+            UserSaveRequest request = new UserSaveRequest(
+                    existing == null ? row.userId : existing.getUserId(),
+                    row.userName,
+                    row.nickName,
+                    row.userPhone,
+                    row.userEmail,
+                    row.userGender,
+                    row.status,
+                    row.password,
+                    parseRoles(row.userRoles)
+            );
+            if (existing == null) {
+                createUser(request);
+            } else {
+                updateUser(request);
+            }
+            count++;
+        }
+        if (count == 0) {
+            throw new BusinessException("导入用户没有有效数据行");
+        }
+        return new ImportResult(count, skipped);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -60,7 +128,11 @@ public class SysUserService {
 
         SysUser user = new SysUser();
         fillUser(user, request);
-        user.setPassword(passwordEncoder.encode(defaultIfBlank(request.password(), "123456")));
+        String password = defaultIfBlank(request.password(), "123456");
+        if (!Objects.equals(password, "123456")) {
+            loginSecurityService.validatePasswordStrength(password);
+        }
+        user.setPassword(passwordEncoder.encode(password));
         user.setStatus(defaultIfBlank(request.status(), "1"));
         user.setDelFlag("0");
         user.setCreateBy("system");
@@ -79,6 +151,7 @@ public class SysUserService {
         ensureUniqueUserName(request.userName(), request.id());
         fillUser(user, request);
         if (hasText(request.password())) {
+            loginSecurityService.validatePasswordStrength(request.password());
             user.setPassword(passwordEncoder.encode(request.password()));
         }
         user.setUpdateBy("system");
@@ -105,6 +178,7 @@ public class SysUserService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void updateStatus(UserStatusRequest request) {
         SysUser user = findUser(request.id());
         user.setStatus(request.status());
@@ -113,8 +187,10 @@ public class SysUserService {
         userMapper.updateById(user);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void resetPassword(UserResetPasswordRequest request) {
         SysUser user = findUser(request.id());
+        loginSecurityService.validatePasswordStrength(request.password());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setUpdateBy("system");
         user.setUpdateTime(LocalDateTime.now());
@@ -147,6 +223,33 @@ public class SysUserService {
         );
     }
 
+    private UserExcel toUserExcel(SysUser user) {
+        UserExcel excel = new UserExcel();
+        excel.userId = user.getUserId();
+        excel.userName = user.getUserName();
+        excel.nickName = user.getNickName();
+        excel.userPhone = user.getPhonenumber();
+        excel.userEmail = user.getEmail();
+        excel.userGender = sexLabel(user.getSex());
+        excel.status = user.getStatus();
+        excel.userRoles = String.join(",", userMapper.selectRoleCodesByUserId(user.getUserId()));
+        excel.createTime = formatDateTime(user.getCreateTime());
+        return excel;
+    }
+
+    private SysUser findImportUser(UserExcel row) {
+        if (row.userId != null) {
+            SysUser user = userMapper.selectById(row.userId);
+            if (user != null && Objects.equals(user.getDelFlag(), "0")) {
+                return user;
+            }
+        }
+        return userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getUserName, row.userName)
+                .eq(SysUser::getDelFlag, "0")
+                .last("LIMIT 1"));
+    }
+
     private void fillUser(SysUser user, UserSaveRequest request) {
         user.setUserName(request.userName());
         user.setNickName(defaultIfBlank(request.nickName(), request.userName()));
@@ -177,10 +280,13 @@ public class SysUserService {
         }
     }
 
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
+    private List<String> parseRoles(String roles) {
+        if (!hasText(roles)) {
+            return List.of();
+        }
+        return ROLE_SPLITTER.splitAsStream(roles)
+                .filter(this::hasText)
+                .toList();
     }
 
     private String formatDateTime(LocalDateTime dateTime) {
@@ -188,12 +294,8 @@ public class SysUserService {
     }
 
     private String sexLabel(String sex) {
-        if (Objects.equals(sex, "0")) {
-            return "男";
-        }
-        if (Objects.equals(sex, "1")) {
-            return "女";
-        }
+        if (Objects.equals(sex, "0")) return "男";
+        if (Objects.equals(sex, "1")) return "女";
         return "未知";
     }
 
@@ -205,14 +307,8 @@ public class SysUserService {
     }
 
     private long parseLong(String value, long fallback) {
-        if (!hasText(value)) {
-            return fallback;
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        if (!hasText(value)) return fallback;
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return fallback; }
     }
 
     private boolean hasText(String value) {

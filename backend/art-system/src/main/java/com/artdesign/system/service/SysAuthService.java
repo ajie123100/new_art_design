@@ -24,20 +24,25 @@ public class SysAuthService {
     private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final SysLoginLogService loginLogService;
+    private final SysLoginSecurityService loginSecurityService;
 
     @Autowired
-    public SysAuthService(SysUserMapper userMapper, PasswordEncoder passwordEncoder, SysLoginLogService loginLogService) {
+    public SysAuthService(SysUserMapper userMapper, PasswordEncoder passwordEncoder, SysLoginLogService loginLogService, SysLoginSecurityService loginSecurityService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.loginLogService = loginLogService;
+        this.loginSecurityService = loginSecurityService;
     }
 
     public SysAuthService(SysUserMapper userMapper, PasswordEncoder passwordEncoder) {
-        this(userMapper, passwordEncoder, null);
+        this(userMapper, passwordEncoder, null, null);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public SysUser login(String userName, String password, String ipaddr, String userAgent) {
+        if (loginSecurityService != null) {
+            loginSecurityService.checkBeforeLogin(userName, ipaddr);
+        }
         SysUser user = userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
                 .eq(SysUser::getUserName, userName)
                 .eq(SysUser::getDelFlag, "0")
@@ -45,14 +50,19 @@ public class SysAuthService {
 
         if (user == null || !passwordMatches(password, user.getPassword())) {
             recordLogin(userName, ipaddr, userAgent, BusinessStatus.FAIL, "用户名或密码错误");
+            if (loginSecurityService != null) {
+                loginSecurityService.recordLoginFailure(userName);
+            }
             throw new BusinessException("用户名或密码错误");
         }
         if (!Objects.equals(user.getStatus(), "1")) {
             recordLogin(userName, ipaddr, userAgent, BusinessStatus.FAIL, "账号已停用");
             throw new BusinessException("账号已停用");
         }
-        upgradePlainPasswordIfNeeded(user, password);
-        updateLoginInfo(user, ipaddr);
+        updateSuccessfulLoginInfo(user, password, ipaddr);
+        if (loginSecurityService != null) {
+            loginSecurityService.recordLoginSuccess(userName);
+        }
         recordLogin(userName, ipaddr, userAgent, BusinessStatus.SUCCESS, "登录成功");
         return user;
     }
@@ -72,8 +82,17 @@ public class SysAuthService {
                 user.getUserId(),
                 user.getUserName(),
                 user.getEmail(),
-                defaultIfBlank(user.getAvatar(), DEFAULT_AVATAR)
+                defaultIfBlank(user.getAvatar(), DEFAULT_AVATAR),
+                isInitialPassword(user.getPassword())
         );
+    }
+
+    public SysUser getActiveUser(Long userId) {
+        SysUser user = findUser(userId);
+        if (!Objects.equals(user.getStatus(), "1")) {
+            throw new BusinessException("账号已停用");
+        }
+        return user;
     }
 
     public List<String> getRoleList(Long userId) {
@@ -118,19 +137,14 @@ public class SysAuthService {
         return Objects.equals(rawPassword, storedPassword);
     }
 
-    private void upgradePlainPasswordIfNeeded(SysUser user, String rawPassword) {
-        if (isBcrypt(user.getPassword())) {
-            return;
+    private void updateSuccessfulLoginInfo(SysUser user, String rawPassword, String ipaddr) {
+        if (!isBcrypt(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(rawPassword));
         }
-        user.setPassword(passwordEncoder.encode(rawPassword));
-        user.setUpdateBy("system");
-        user.setUpdateTime(LocalDateTime.now());
-        userMapper.updateById(user);
-    }
-
-    private void updateLoginInfo(SysUser user, String ipaddr) {
         user.setLoginIp(defaultIfBlank(ipaddr, ""));
         user.setLoginDate(LocalDateTime.now());
+        user.setUpdateBy("system");
+        user.setUpdateTime(LocalDateTime.now());
         userMapper.updateById(user);
     }
 
@@ -142,6 +156,10 @@ public class SysAuthService {
 
     private boolean isBcrypt(String password) {
         return password != null && (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$"));
+    }
+
+    private boolean isInitialPassword(String password) {
+        return hasText(password) && passwordEncoder.matches("123456", password);
     }
 
     private boolean hasText(String value) {

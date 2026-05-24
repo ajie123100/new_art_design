@@ -1,6 +1,7 @@
 package com.artdesign.system.service;
 
 import com.artdesign.common.core.page.PageResult;
+import com.artdesign.common.core.page.PageUtils;
 import com.artdesign.common.exception.BusinessException;
 import com.artdesign.system.domain.dto.JobListItem;
 import com.artdesign.system.domain.dto.JobSaveRequest;
@@ -8,6 +9,8 @@ import com.artdesign.system.domain.entity.SysJob;
 import com.artdesign.system.mapper.SysJobLogMapper;
 import com.artdesign.system.mapper.SysJobMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.quartz.CronExpression;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -19,6 +22,7 @@ import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -40,21 +44,23 @@ public class SysJobService {
     }
 
     public PageResult<JobListItem> list(Map<String, String> params) {
-        long current = parseLong(params.get("current"), 1L);
-        long size = parseLong(params.get("size"), 10L);
-        List<SysJob> jobs = jobMapper.selectList(new LambdaQueryWrapper<SysJob>()
+        long current = PageUtils.pageNum(params);
+        long size = PageUtils.pageSize(params);
+        Page<SysJob> page = new Page<>(current, size);
+        IPage<SysJob> result = jobMapper.selectPage(page, new LambdaQueryWrapper<SysJob>()
                 .like(hasText(params.get("jobName")), SysJob::getJobName, params.get("jobName"))
                 .eq(hasText(params.get("jobGroup")), SysJob::getJobGroup, params.get("jobGroup"))
                 .eq(hasText(params.get("status")), SysJob::getStatus, params.get("status"))
                 .orderByDesc(SysJob::getJobId));
-        List<JobListItem> records = jobs.stream().map(this::toListItem).toList();
-        return page(records, current, size);
+        List<JobListItem> records = result.getRecords().stream().map(this::toListItem).toList();
+        return new PageResult<>(records, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     public JobListItem get(Long jobId) {
         return toListItem(findJob(jobId));
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Long create(JobSaveRequest request) {
         validateCron(request.cronExpression());
         SysJob job = new SysJob();
@@ -70,6 +76,7 @@ public class SysJobService {
         return job.getJobId();
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void update(JobSaveRequest request) {
         if (request.jobId() == null) {
             throw new BusinessException("任务ID不能为空");
@@ -86,6 +93,7 @@ public class SysJobService {
         rescheduleJob(job);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void delete(List<Long> jobIds) {
         if (jobIds == null || jobIds.isEmpty()) {
             throw new BusinessException("请选择要删除的任务");
@@ -97,6 +105,7 @@ public class SysJobService {
         jobMapper.deleteBatchIds(jobIds);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void changeStatus(Long jobId, String status) {
         SysJob job = findJob(jobId);
         job.setStatus(status);
@@ -115,7 +124,16 @@ public class SysJobService {
             SysJob job = findJob(jobId);
             try {
                 JobKey jobKey = new JobKey(getJobKey(job), getGroup(job));
-                scheduler.triggerJob(jobKey);
+                if (scheduler.checkExists(jobKey)) {
+                    scheduler.triggerJob(jobKey);
+                    continue;
+                }
+                JobDetail jobDetail = buildJobDetail(job, "RUN_" + job.getJobId() + "_" + System.nanoTime());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                        .withIdentity("RUN_TRIGGER_" + job.getJobId() + "_" + System.nanoTime(), getGroup(job))
+                        .startNow()
+                        .build();
+                scheduler.scheduleJob(jobDetail, trigger);
             } catch (SchedulerException e) {
                 throw new BusinessException("任务执行失败: " + e.getMessage());
             }
@@ -130,12 +148,7 @@ public class SysJobService {
             if (!"0".equals(job.getStatus())) {
                 return;
             }
-            JobDetail jobDetail = JobBuilder.newJob(TasksJob.class)
-                    .withIdentity(getJobKey(job), getGroup(job))
-                    .build();
-            JobDataMap dataMap = jobDetail.getJobDataMap();
-            dataMap.put("jobId", job.getJobId());
-            dataMap.put("invokeTarget", job.getInvokeTarget());
+            JobDetail jobDetail = buildJobDetail(job, getJobKey(job));
             CronScheduleBuilder scheduleBuilder = CronScheduleBuilder.cronSchedule(job.getCronExpression())
                     .withMisfireHandlingInstructionDoNothing();
             Trigger trigger = TriggerBuilder.newTrigger()
@@ -146,6 +159,16 @@ public class SysJobService {
         } catch (SchedulerException e) {
             throw new BusinessException("任务调度异常: " + e.getMessage());
         }
+    }
+
+    private JobDetail buildJobDetail(SysJob job, String jobKey) {
+        JobDetail jobDetail = JobBuilder.newJob(TasksJob.class)
+                .withIdentity(jobKey, getGroup(job))
+                .build();
+        JobDataMap dataMap = jobDetail.getJobDataMap();
+        dataMap.put("jobId", job.getJobId());
+        dataMap.put("invokeTarget", job.getInvokeTarget());
+        return jobDetail;
     }
 
     private void rescheduleJob(SysJob job) {
@@ -206,12 +229,6 @@ public class SysJobService {
         job.setInvokeTarget(request.invokeTarget());
         job.setCronExpression(request.cronExpression());
         job.setRemark(defaultIfBlank(request.remark(), ""));
-    }
-
-    private <T> PageResult<T> page(List<T> records, long current, long size) {
-        int from = (int) Math.min(Math.max(current - 1, 0) * size, records.size());
-        int to = (int) Math.min(from + size, records.size());
-        return PageResult.of(records.subList(from, to), current, size, records.size());
     }
 
     private String formatDateTime(LocalDateTime dateTime) {

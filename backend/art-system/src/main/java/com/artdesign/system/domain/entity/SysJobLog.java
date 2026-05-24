@@ -15,6 +15,7 @@ public class SysJobLog {
     private String jobMessage;
     private String status;
     private String exceptionInfo;
+    private Long elapsedMs;
     private LocalDateTime createTime;
 
     public Long getJobLogId() { return jobLogId; }
@@ -31,6 +32,8 @@ public class SysJobLog {
     public void setStatus(String status) { this.status = status; }
     public String getExceptionInfo() { return exceptionInfo; }
     public void setExceptionInfo(String exceptionInfo) { this.exceptionInfo = exceptionInfo; }
+    public Long getElapsedMs() { return elapsedMs; }
+    public void setElapsedMs(Long elapsedMs) { this.elapsedMs = elapsedMs; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
 }

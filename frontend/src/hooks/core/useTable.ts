@@ -62,9 +62,9 @@ export interface UseTableConfig<
     columnsFactory?: () => ColumnOption<TRecord>[]
     /** 自定义分页字段映射 */
     paginationKey?: {
-      /** 当前页码字段名，默认为 'current' */
+      /** 当前页码字段名，默认为 'pageNum' */
       current?: string
-      /** 每页条数字段名，默认为 'size' */
+      /** 每页条数字段名，默认为 'pageSize' */
       size?: string
     }
   }
